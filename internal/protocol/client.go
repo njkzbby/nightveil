@@ -1,0 +1,40 @@
+package protocol
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/nightveil/nv/internal/transport"
+)
+
+// Client implements ClientProtocol.
+type Client struct{}
+
+func NewClient() *Client { return &Client{} }
+
+// Handshake sends CONNECT with target address and waits for ACK.
+func (c *Client) Handshake(ctx context.Context, conn transport.Conn, req *Request) error {
+	// Send CONNECT frame
+	payload := EncodeConnectPayload(req.Host, req.Port)
+	if err := WriteFrame(conn, &Frame{Type: CmdConnect, Payload: payload}); err != nil {
+		return fmt.Errorf("send connect: %w", err)
+	}
+
+	// Read ACK
+	ack, err := ReadFrame(conn)
+	if err != nil {
+		return fmt.Errorf("read ack: %w", err)
+	}
+	if ack.Type != CmdACK {
+		return fmt.Errorf("expected ACK, got type 0x%02x", ack.Type)
+	}
+	if len(ack.Payload) < 1 || Status(ack.Payload[0]) != StatusOK {
+		status := StatusRefused
+		if len(ack.Payload) >= 1 {
+			status = Status(ack.Payload[0])
+		}
+		return fmt.Errorf("server refused connection: status 0x%02x", status)
+	}
+
+	return nil
+}

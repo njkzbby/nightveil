@@ -1,0 +1,28 @@
+server:
+  listen: "0.0.0.0:443"
+
+  tls:
+    cert_file: "/etc/nightveil/cert.pem"
+    key_file: "/etc/nightveil/key.pem"
+
+  auth:
+    private_key: "REPLACE_WITH_BASE64_PRIVATE_KEY"
+    short_ids:
+      - "REPLACE_WITH_SHORT_ID"
+    max_time_diff: 120
+
+  transport:
+    type: "xhttp"
+    # Server accepts any path prefix — each client has unique paths
+    max_chunk_size: 14336
+    session_timeout: 30
+    max_parallel_uploads: 4
+
+  middleware:
+    - type: "padding"
+      min_bytes: 64
+      max_bytes: 256
+
+  fallback:
+    mode: "reverse_proxy"
+    upstream: "http://127.0.0.1:8080"
