@@ -74,6 +74,17 @@ func (m *Manager) Close() error {
 	return nil
 }
 
+// Replace swaps a transport at the given index (for parameter rotation).
+func (m *Manager) Replace(idx int, nt NamedTransport) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if idx >= 0 && idx < len(m.transports) {
+		old := m.transports[idx]
+		m.transports[idx] = nt
+		go old.Transport.Close() // close old in background
+	}
+}
+
 // ActiveTransport returns the name of the currently active transport.
 func (m *Manager) ActiveTransport() string {
 	m.mu.RLock()

@@ -20,6 +20,7 @@ import (
 	"github.com/nightveil/nv/internal/proxy"
 	"github.com/nightveil/nv/internal/security"
 	"github.com/nightveil/nv/internal/throttle"
+	"github.com/nightveil/nv/internal/transport"
 	"github.com/nightveil/nv/internal/transport/xhttp"
 )
 
@@ -196,6 +197,49 @@ func runConnect() {
 		ln.Close()
 	}()
 
+	// Build transport with Manager for failover
+	makeXHTTPTransport := func() transport.ClientTransport {
+		params := rotator.GetParams()
+		cfg := xhttp.Config{
+			PathPrefix:     params.PathPrefix,
+			UploadPath:     params.UploadPath,
+			DownloadPath:   params.DownloadPath,
+			SessionKeyName: params.SessionKey,
+			MaxChunkSize:   params.ChunkSize,
+		}
+		return xhttp.NewClient(serverURL, cfg, clientAuth, httpClient)
+	}
+
+	// Transport manager: XHTTP primary, reconnect wrapper for resilience
+	mgr := transport.NewManager([]transport.NamedTransport{
+		{Name: "xhttp", Transport: makeXHTTPTransport()},
+	})
+	defer mgr.Close()
+
+	// Health check — try to promote back to primary every 60s
+	mgr.StartHealthCheck(ctx, 60*time.Second)
+
+	// Rebuild transport on session rotation (new paths)
+	rotator.OnSessionRotate(func(p throttle.LiveParams) {
+		log.Printf("[manager] rebuilding transport with new params")
+		newTransport := makeXHTTPTransport()
+		mgr.Replace(0, transport.NamedTransport{Name: "xhttp", Transport: newTransport})
+	})
+
+	fmt.Printf("  %-18s %s\n", "Transport:", mgr.ActiveTransport())
+	fmt.Println()
+	fmt.Printf("  Configure your browser proxy to %s (SOCKS5)\n", c.Inbound.Listen)
+	fmt.Println()
+
+	go func() {
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+		<-sig
+		fmt.Println("\n  disconnected")
+		cancel()
+		ln.Close()
+	}()
+
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -204,19 +248,16 @@ func runConnect() {
 			}
 			continue
 		}
-		go handleSOCKS5Client(ctx, conn, serverURL, clientAuth, httpClient, proto, detector, rotator)
+		go handleSOCKS5Client(ctx, conn, mgr, proto, detector)
 	}
 }
 
 func handleSOCKS5Client(
 	ctx context.Context,
 	socksConn net.Conn,
-	serverURL string,
-	clientAuth auth.ClientAuth,
-	httpClient *http.Client,
+	mgr *transport.Manager,
 	proto *protocol.Client,
 	detector *throttle.Detector,
-	rotator *throttle.Rotator,
 ) {
 	defer socksConn.Close()
 
@@ -225,23 +266,14 @@ func handleSOCKS5Client(
 		return
 	}
 
-	params := rotator.GetParams()
-	xhttpCfg := xhttp.Config{
-		PathPrefix:     params.PathPrefix,
-		UploadPath:     params.UploadPath,
-		DownloadPath:   params.DownloadPath,
-		SessionKeyName: params.SessionKey,
-		MaxChunkSize:   params.ChunkSize,
-	}
-	xhttpClient := xhttp.NewClient(serverURL, xhttpCfg, clientAuth, httpClient)
-
 	var sessionID [16]byte
 	rand.Read(sessionID[:])
 
 	dialStart := time.Now()
-	tunnelConn, err := xhttpClient.Dial(ctx, sessionID)
+	tunnelConn, err := mgr.Dial(ctx, sessionID)
 	dialRTT := time.Since(dialStart)
 	if err != nil {
+		log.Printf("[%s:%d] dial failed: %v", target.Host, target.Port, err)
 		proxy.SOCKS5SendFailure(socksConn)
 		return
 	}
