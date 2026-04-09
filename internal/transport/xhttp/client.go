@@ -152,30 +152,70 @@ func (c *clientConn) Read(p []byte) (int, error) {
 	return 0, io.EOF
 }
 
-// Write sends data as a POST upload chunk.
+// Write sends data as POST upload chunks with pipelining.
+// Chunks are sent concurrently — up to 4 POSTs in flight simultaneously.
+// Server reassembles in order using sequence numbers.
 func (c *clientConn) Write(p []byte) (int, error) {
 	maxChunk := c.client.Config.MaxChunkSize
-	written := 0
+	if maxChunk <= 0 {
+		maxChunk = 65536
+	}
 
-	for written < len(p) {
-		end := written + maxChunk
+	// Single chunk — fast path, no goroutine overhead
+	if len(p) <= maxChunk {
+		return len(p), c.postChunk(p)
+	}
+
+	// Multiple chunks — pipeline with semaphore
+	// Pre-assign sequence numbers to maintain order
+	type seqChunk struct {
+		seq  int64
+		data []byte
+	}
+
+	var chunks []seqChunk
+	for i := 0; i < len(p); i += maxChunk {
+		end := i + maxChunk
 		if end > len(p) {
 			end = len(p)
 		}
-		chunk := p[written:end]
-
-		if err := c.postChunk(chunk); err != nil {
-			return written, err
-		}
-		written = end
+		seq := c.uploadSeq.Add(1) - 1
+		cp := make([]byte, end-i)
+		copy(cp, p[i:end])
+		chunks = append(chunks, seqChunk{seq: seq, data: cp})
 	}
 
-	return written, nil
+	// Send concurrently (max 4 in flight)
+	sem := make(chan struct{}, 4)
+	errCh := make(chan error, len(chunks))
+
+	for _, ch := range chunks {
+		sem <- struct{}{}
+		go func(s int64, data []byte) {
+			defer func() { <-sem }()
+			errCh <- c.postChunkWithSeq(data, s)
+		}(ch.seq, ch.data)
+	}
+
+	var firstErr error
+	for range chunks {
+		if err := <-errCh; err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+
+	if firstErr != nil {
+		return 0, firstErr
+	}
+	return len(p), nil
 }
 
 func (c *clientConn) postChunk(data []byte) error {
 	seq := c.uploadSeq.Add(1) - 1
+	return c.postChunkWithSeq(data, seq)
+}
 
+func (c *clientConn) postChunkWithSeq(data []byte, seq int64) error {
 	url := c.client.ServerURL + c.client.Config.fullUploadPath() +
 		"?seq=" + strconv.FormatInt(seq, 10) +
 		"&" + c.client.Config.SessionKeyName + "=" + c.sessionB64
