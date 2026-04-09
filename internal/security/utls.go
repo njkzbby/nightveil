@@ -1,4 +1,3 @@
-// Package security provides uTLS-based HTTP client for Chrome fingerprint mimicry.
 package security
 
 import (
@@ -14,10 +13,17 @@ import (
 	"golang.org/x/net/http2"
 )
 
-// NewUTLSHTTPClient creates an http.Client that uses uTLS with the specified
-// browser fingerprint for all TLS connections.
-func NewUTLSHTTPClient(serverName string, fingerprint string) *http.Client {
-	helloID := ResolveHelloID(fingerprint)
+// UTLSConfig for creating the HTTP client.
+type UTLSConfig struct {
+	ServerName  string
+	Fingerprint string
+	SkipVerify  bool
+}
+
+// NewUTLSHTTPClient creates an http.Client that uses uTLS with Chrome fingerprint.
+// Uses HTTP/2 with tuned timeouts for stable long-lived streaming.
+func NewUTLSHTTPClient(cfg UTLSConfig) *http.Client {
+	helloID := ResolveHelloID(cfg.Fingerprint)
 
 	dialer := &net.Dialer{Timeout: 30 * time.Second}
 
@@ -28,13 +34,14 @@ func NewUTLSHTTPClient(serverName string, fingerprint string) *http.Client {
 				return nil, fmt.Errorf("dial %s: %w", addr, err)
 			}
 
-			host := serverName
-			if host == "" {
-				host, _, _ = net.SplitHostPort(addr)
+			sni := cfg.ServerName
+			if sni == "" {
+				sni, _, _ = net.SplitHostPort(addr)
 			}
 
 			tlsConn := utls.UClient(tcpConn, &utls.Config{
-				ServerName: host,
+				ServerName:         sni,
+				InsecureSkipVerify: cfg.SkipVerify,
 			}, helloID)
 
 			if err := tlsConn.HandshakeContext(ctx); err != nil {
@@ -44,9 +51,17 @@ func NewUTLSHTTPClient(serverName string, fingerprint string) *http.Client {
 
 			return tlsConn, nil
 		},
+		// Keep HTTP/2 connection alive with pings instead of closing idle streams
+		ReadIdleTimeout: 30 * time.Second,  // send ping after 30s idle
+		PingTimeout:     15 * time.Second,  // wait 15s for ping response
+		// Don't timeout streaming writes
+		WriteByteTimeout: 0,
 	}
 
-	return &http.Client{Transport: transport}
+	return &http.Client{
+		Transport: transport,
+		Timeout:   0, // no global timeout for streaming
+	}
 }
 
 // ResolveHelloID maps a fingerprint name to a uTLS ClientHelloID.

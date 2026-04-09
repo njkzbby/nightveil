@@ -24,16 +24,21 @@ func setupTestServer(t *testing.T) (*Server, auth.ClientAuth, *httptest.Server) 
 	copy(pubKey[:], pubBytes)
 
 	shortID := []byte{0xAB, 0xCD}
+	userPriv, userPub, _ := auth.GenerateUserKeypair()
 
 	serverAuth := &auth.ServerX25519{
-		PrivateKey:  privKey,
-		ShortIDs:    map[string]bool{"abcd": true},
+		PrivateKey: privKey,
+		Users: map[string]*auth.UserEntry{
+			"abcd": {PublicKey: userPub, ShortID: "abcd"},
+		},
 		MaxTimeDiff: 120,
 		TokenHeader: "nv_token",
 	}
 
 	clientAuth := &auth.ClientX25519{
 		ServerPublicKey: pubKey,
+		UserPrivateKey:  userPriv,
+		UserPublicKey:   userPub,
 		ShortID:         shortID,
 	}
 

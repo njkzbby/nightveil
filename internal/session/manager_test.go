@@ -82,22 +82,82 @@ func TestSessionCloseUnblocksRead(t *testing.T) {
 	}
 }
 
-func TestSessionDownloadPipe(t *testing.T) {
+func TestSessionDownloadBuffer(t *testing.T) {
 	s := NewSession([16]byte{4})
 	defer s.Close()
 
 	msg := []byte("download data")
 	go func() {
-		s.DownloadWriter.Write(msg)
+		s.DownloadBuf.Write(msg)
 	}()
 
+	// Wait for data notification
+	<-s.DownloadBuf.Notify()
+
 	buf := make([]byte, 100)
-	n, err := s.DownloadReader.Read(buf)
+	n, _, err := s.DownloadBuf.ReadFrom(0, buf)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(buf[:n]) != "download data" {
 		t.Fatalf("got %q", buf[:n])
+	}
+}
+
+func TestDownloadBufferOffsetResume(t *testing.T) {
+	db := NewDownloadBuffer()
+	defer db.Close()
+
+	// Write 3 chunks
+	db.Write([]byte("aaa"))
+	db.Write([]byte("bbb"))
+	db.Write([]byte("ccc"))
+
+	buf := make([]byte, 100)
+
+	// Read from offset 0 — gets everything
+	n, off, _ := db.ReadFrom(0, buf)
+	if string(buf[:n]) != "aaabbbccc" || off != 9 {
+		t.Fatalf("read0: got %q offset=%d", buf[:n], off)
+	}
+
+	// Read from offset 3 — skips first chunk
+	n, off, _ = db.ReadFrom(3, buf)
+	if string(buf[:n]) != "bbbccc" || off != 9 {
+		t.Fatalf("read3: got %q offset=%d", buf[:n], off)
+	}
+
+	// Read from offset 9 — no data yet
+	n, off, _ = db.ReadFrom(9, buf)
+	if n != 0 || off != 9 {
+		t.Fatalf("read9: got n=%d offset=%d", n, off)
+	}
+
+	// Write more, read from 9
+	db.Write([]byte("ddd"))
+	n, off, _ = db.ReadFrom(9, buf)
+	if string(buf[:n]) != "ddd" || off != 12 {
+		t.Fatalf("read9+: got %q offset=%d", buf[:n], off)
+	}
+}
+
+func TestDownloadBufferClose(t *testing.T) {
+	db := NewDownloadBuffer()
+	db.Write([]byte("data"))
+	db.Close()
+
+	buf := make([]byte, 100)
+
+	// Can still read existing data
+	n, off, err := db.ReadFrom(0, buf)
+	if n != 4 || off != 4 || err != nil {
+		t.Fatalf("got n=%d off=%d err=%v", n, off, err)
+	}
+
+	// Reading past end returns error
+	_, _, err = db.ReadFrom(4, buf)
+	if err != ErrSessionClosed {
+		t.Fatalf("expected ErrSessionClosed, got %v", err)
 	}
 }
 

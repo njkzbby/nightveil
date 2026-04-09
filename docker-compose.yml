@@ -1,0 +1,35 @@
+services:
+  nightveil:
+    build: .
+    container_name: nightveil
+    restart: unless-stopped
+    ports:
+      - "${NV_PORT:-443}:${NV_PORT:-443}"
+      - "${NV_PORT:-443}:${NV_PORT:-443}/udp"
+    volumes:
+      - nightveil-data:/etc/nightveil
+    environment:
+      - NV_PORT=${NV_PORT:-443}
+      - NV_NAME=${NV_NAME:-Nightveil}
+      - NV_DEST=${NV_DEST:-}
+
+volumes:
+  nightveil-data:
+
+# Usage:
+#
+# Basic (self-signed TLS):
+#   docker compose up -d
+#   docker compose logs  ← import link here
+#
+# Custom port:
+#   NV_PORT=8443 docker compose up -d
+#
+# REALITY mode (probes see real google.com):
+#   NV_DEST=google.com:443 docker compose up -d
+#
+# Rebuild after updates:
+#   docker compose build --no-cache && docker compose up -d
+#
+# Add user:
+#   docker compose exec nightveil nv keygen -server HOST:PORT -remark "Friend"

@@ -23,7 +23,6 @@ server:
     type: "xhttp"
     max_chunk_size: 14336
     session_timeout: 30
-    max_parallel_uploads: 4
   middleware:
     - type: "padding"
       min_bytes: 64
@@ -65,9 +64,6 @@ server:
 	}
 	if s.Transport.MaxChunkSize != 14336 {
 		t.Errorf("max_chunk_size: got %d", s.Transport.MaxChunkSize)
-	}
-	if s.Transport.MaxParallelUploads != 4 {
-		t.Errorf("max_parallel_uploads: got %d", s.Transport.MaxParallelUploads)
 	}
 	if len(s.Middleware) != 1 || s.Middleware[0].Type != "padding" {
 		t.Errorf("middleware: got %v", s.Middleware)

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/chacha20poly1305"
@@ -19,14 +20,17 @@ import (
 
 // --- Client ---
 
-// ClientX25519 implements ClientAuth using X25519 ECDH + HKDF + ChaCha20-Poly1305.
+// ClientX25519 implements ClientAuth with per-user keys.
+// Each user has their own keypair. Server knows user's public key.
 type ClientX25519 struct {
 	ServerPublicKey [32]byte
-	ShortID         []byte // 0-8 bytes
+	UserPrivateKey  [32]byte // per-user private key
+	UserPublicKey   [32]byte // per-user public key (derived from private)
+	ShortID         []byte   // 0-8 bytes, user identifier for fast lookup
 }
 
 func (c *ClientX25519) GenerateToken(sessionID [16]byte) ([]byte, error) {
-	// 1. Ephemeral X25519 keypair
+	// 1. Ephemeral X25519 keypair (per-request, forward secrecy)
 	var ephPriv [32]byte
 	if _, err := rand.Read(ephPriv[:]); err != nil {
 		return nil, fmt.Errorf("generate ephemeral key: %w", err)
@@ -37,37 +41,51 @@ func (c *ClientX25519) GenerateToken(sessionID [16]byte) ([]byte, error) {
 		return nil, fmt.Errorf("derive ephemeral public: %w", err)
 	}
 
-	// 2. ECDH shared secret
-	shared, err := curve25519.X25519(ephPriv[:], c.ServerPublicKey[:])
+	// 2. Double ECDH: ephemeral×server + user×server
+	sharedEph, err := curve25519.X25519(ephPriv[:], c.ServerPublicKey[:])
 	if err != nil {
-		return nil, fmt.Errorf("ecdh: %w", err)
+		return nil, fmt.Errorf("ecdh ephemeral: %w", err)
+	}
+	sharedUser, err := curve25519.X25519(c.UserPrivateKey[:], c.ServerPublicKey[:])
+	if err != nil {
+		return nil, fmt.Errorf("ecdh user: %w", err)
 	}
 
-	// 3. Timestamp (8 bytes, big-endian, Unix seconds)
+	// Combine both shared secrets
+	combined := make([]byte, 64)
+	copy(combined[:32], sharedEph)
+	copy(combined[32:], sharedUser)
+
+	// 3. Timestamp
 	var ts [8]byte
 	binary.BigEndian.PutUint64(ts[:], uint64(time.Now().Unix()))
 
-	// 4. Derive keys via HKDF
-	authKey, err := deriveKey(shared, c.ShortID, ts[:], "nv-auth")
+	// 4. Derive auth key from combined secret
+	authKey, err := deriveKey(combined, c.ShortID, ts[:], "nv-auth-v2")
 	if err != nil {
 		return nil, err
 	}
 
-	// 5. AEAD seal: encrypt sessionID
+	// 5. AEAD seal: encrypt sessionID with random nonce
 	aead, err := chacha20poly1305.New(authKey)
 	if err != nil {
 		return nil, fmt.Errorf("create aead: %w", err)
 	}
-	nonce := make([]byte, aead.NonceSize()) // zero nonce — single-use key
+	nonce := make([]byte, aead.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, fmt.Errorf("generate nonce: %w", err)
+	}
 	ciphertext := aead.Seal(nil, nonce, sessionID[:], nil)
 
-	// 6. Assemble token: ephPub || shortIDLen || shortID || timestamp || ciphertext
-	tokenLen := 32 + 1 + len(c.ShortID) + 8 + len(ciphertext)
+	// 6. Token: ephPub || userPub || shortIDLen || shortID || timestamp || nonce || ciphertext
+	tokenLen := 32 + 32 + 1 + len(c.ShortID) + 8 + len(nonce) + len(ciphertext)
 	token := make([]byte, 0, tokenLen)
 	token = append(token, ephPub...)
+	token = append(token, c.UserPublicKey[:]...)
 	token = append(token, byte(len(c.ShortID)))
 	token = append(token, c.ShortID...)
 	token = append(token, ts[:]...)
+	token = append(token, nonce...)
 	token = append(token, ciphertext...)
 
 	return token, nil
@@ -75,16 +93,22 @@ func (c *ClientX25519) GenerateToken(sessionID [16]byte) ([]byte, error) {
 
 // --- Server ---
 
-// ServerX25519 implements ServerAuth using X25519 ECDH + HKDF + ChaCha20-Poly1305.
+// UserEntry represents a registered user on the server.
+type UserEntry struct {
+	PublicKey [32]byte
+	ShortID   string
+	Name      string
+}
+
+// ServerX25519 implements ServerAuth with per-user key validation.
 type ServerX25519 struct {
 	PrivateKey  [32]byte
-	ShortIDs    map[string]bool // allowed shortIDs
-	MaxTimeDiff int64           // seconds
-	TokenHeader string          // HTTP header or cookie name containing the token
+	Users       map[string]*UserEntry // shortID hex → user entry
+	MaxTimeDiff int64
+	TokenHeader string
 }
 
 func (s *ServerX25519) Validate(ctx context.Context, r *http.Request) (sessionID [16]byte, err error) {
-	// Extract token from cookie or header
 	tokenB64 := extractToken(r, s.TokenHeader)
 	if tokenB64 == "" {
 		return sessionID, ErrAuthFailed
@@ -95,27 +119,36 @@ func (s *ServerX25519) Validate(ctx context.Context, r *http.Request) (sessionID
 		return sessionID, ErrAuthFailed
 	}
 
-	// Parse token: ephPub(32) || shortIDLen(1) || shortID(0-8) || timestamp(8) || ciphertext(32)
-	if len(tokenBytes) < 32+1+0+8+16 { // minimum: no shortID, 16B ciphertext tag only
+	// Parse token: ephPub(32) || userPub(32) || shortIDLen(1) || shortID(0-8) || timestamp(8) || nonce(12) || ciphertext
+	nonceSize := 12 // ChaCha20-Poly1305 nonce size
+	if len(tokenBytes) < 32+32+1+0+8+nonceSize+16 {
 		return sessionID, ErrAuthFailed
 	}
 
 	ephPub := tokenBytes[:32]
-	shortIDLen := int(tokenBytes[32])
-	if shortIDLen > 8 || len(tokenBytes) < 32+1+shortIDLen+8+32 {
+	userPub := tokenBytes[32:64]
+	shortIDLen := int(tokenBytes[64])
+	if shortIDLen > 8 || len(tokenBytes) < 65+shortIDLen+8+nonceSize+32 {
 		return sessionID, ErrAuthFailed
 	}
 
-	shortID := tokenBytes[33 : 33+shortIDLen]
-	ts := tokenBytes[33+shortIDLen : 33+shortIDLen+8]
-	ciphertext := tokenBytes[33+shortIDLen+8:]
+	shortID := tokenBytes[65 : 65+shortIDLen]
+	ts := tokenBytes[65+shortIDLen : 65+shortIDLen+8]
+	nonce := tokenBytes[65+shortIDLen+8 : 65+shortIDLen+8+nonceSize]
+	ciphertext := tokenBytes[65+shortIDLen+8+nonceSize:]
 
-	// Check shortID
-	if len(s.ShortIDs) > 0 {
-		shortIDHex := fmt.Sprintf("%x", shortID)
-		if !s.ShortIDs[shortIDHex] {
-			return sessionID, ErrAuthFailed
-		}
+	// Lookup user by shortID
+	shortIDHex := fmt.Sprintf("%x", shortID)
+	user, exists := s.Users[shortIDHex]
+	if !exists {
+		return sessionID, ErrAuthFailed
+	}
+
+	// Verify userPub matches registered user (zero = legacy mode, accept any)
+	var userPubKey [32]byte
+	copy(userPubKey[:], userPub)
+	if user.PublicKey != ([32]byte{}) && userPubKey != user.PublicKey {
+		return sessionID, ErrAuthFailed
 	}
 
 	// Check timestamp
@@ -129,24 +162,31 @@ func (s *ServerX25519) Validate(ctx context.Context, r *http.Request) (sessionID
 		return sessionID, ErrAuthFailed
 	}
 
-	// ECDH shared secret
-	shared, err := curve25519.X25519(s.PrivateKey[:], ephPub)
+	// Double ECDH: server_priv×ephemeral + server_priv×user_pub
+	sharedEph, err := curve25519.X25519(s.PrivateKey[:], ephPub)
 	if err != nil {
 		return sessionID, ErrAuthFailed
 	}
+	sharedUser, err := curve25519.X25519(s.PrivateKey[:], userPub)
+	if err != nil {
+		return sessionID, ErrAuthFailed
+	}
+
+	combined := make([]byte, 64)
+	copy(combined[:32], sharedEph)
+	copy(combined[32:], sharedUser)
 
 	// Derive auth key
-	authKey, err := deriveKey(shared, shortID, ts, "nv-auth")
+	authKey, err := deriveKey(combined, shortID, ts, "nv-auth-v2")
 	if err != nil {
 		return sessionID, ErrAuthFailed
 	}
 
-	// AEAD open
+	// AEAD open (nonce already parsed from token)
 	aead, err := chacha20poly1305.New(authKey)
 	if err != nil {
 		return sessionID, ErrAuthFailed
 	}
-	nonce := make([]byte, aead.NonceSize())
 	plaintext, err := aead.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
 		return sessionID, ErrAuthFailed
@@ -162,7 +202,6 @@ func (s *ServerX25519) Validate(ctx context.Context, r *http.Request) (sessionID
 
 // --- Helpers ---
 
-// deriveKey uses HKDF-SHA256 to derive a 32-byte key.
 func deriveKey(shared, shortID, timestamp []byte, info string) ([]byte, error) {
 	salt := make([]byte, 0, len(shortID)+len(timestamp))
 	salt = append(salt, shortID...)
@@ -176,27 +215,28 @@ func deriveKey(shared, shortID, timestamp []byte, info string) ([]byte, error) {
 	return key, nil
 }
 
-// extractToken tries to find the auth token in cookies first, then headers.
 func extractToken(r *http.Request, name string) string {
 	if name == "" {
 		name = "nv_token"
 	}
-	// Try cookie first
 	if cookie, err := r.Cookie(name); err == nil && cookie.Value != "" {
 		return cookie.Value
 	}
-	// Try header
 	if v := r.Header.Get(name); v != "" {
 		return v
 	}
 	return ""
 }
 
-// --- Key helpers for config loading ---
+// --- Key helpers ---
 
-// DecodeKey decodes a base64-encoded 32-byte key.
 func DecodeKey(b64 string) ([32]byte, error) {
 	var key [32]byte
+	// Normalize: accept both standard and URL-safe base64
+	b64 = strings.ReplaceAll(b64, "-", "+")
+	b64 = strings.ReplaceAll(b64, "_", "/")
+	b64 = strings.TrimRight(b64, "=")
+
 	raw, err := base64.RawStdEncoding.DecodeString(b64)
 	if err != nil {
 		return key, fmt.Errorf("decode key: %w", err)
@@ -208,7 +248,6 @@ func DecodeKey(b64 string) ([32]byte, error) {
 	return key, nil
 }
 
-// DerivePublicKey derives X25519 public key from private key.
 func DerivePublicKey(private [32]byte) ([32]byte, error) {
 	var pub [32]byte
 	result, err := curve25519.X25519(private[:], curve25519.Basepoint)
@@ -217,4 +256,17 @@ func DerivePublicKey(private [32]byte) ([32]byte, error) {
 	}
 	copy(pub[:], result)
 	return pub, nil
+}
+
+// GenerateUserKeypair creates a new X25519 keypair for a user.
+func GenerateUserKeypair() (private [32]byte, public [32]byte, err error) {
+	if _, err = rand.Read(private[:]); err != nil {
+		return
+	}
+	pub, err := curve25519.X25519(private[:], curve25519.Basepoint)
+	if err != nil {
+		return
+	}
+	copy(public[:], pub)
+	return
 }

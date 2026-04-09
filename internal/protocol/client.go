@@ -12,12 +12,16 @@ type Client struct{}
 
 func NewClient() *Client { return &Client{} }
 
-// Handshake sends CONNECT with target address and waits for ACK.
+// Handshake sends CONNECT/UDP with target address and waits for ACK.
 func (c *Client) Handshake(ctx context.Context, conn transport.Conn, req *Request) error {
-	// Send CONNECT frame
+	// Send command frame (CmdConnect or CmdUDP)
+	cmd := req.Command
+	if cmd == 0 {
+		cmd = CmdConnect
+	}
 	payload := EncodeConnectPayload(req.Host, req.Port)
-	if err := WriteFrame(conn, &Frame{Type: CmdConnect, Payload: payload}); err != nil {
-		return fmt.Errorf("send connect: %w", err)
+	if err := WriteFrame(conn, &Frame{Type: cmd, Payload: payload}); err != nil {
+		return fmt.Errorf("send command: %w", err)
 	}
 
 	// Read ACK

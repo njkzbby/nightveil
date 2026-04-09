@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nightveil — Traffic Flow Map</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0e17;
+    --surface: #111827;
+    --border: #1e293b;
+    --accent: #6366f1;
+    --accent2: #8b5cf6;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --green: #10b981;
+    --red: #ef4444;
+    --yellow: #f59e0b;
+    --cyan: #06b6d4;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    line-height: 1.6;
+  }
+
+  .hero {
+    text-align: center;
+    padding: 80px 20px 40px;
+    background: linear-gradient(180deg, rgba(99,102,241,0.08) 0%, transparent 100%);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .hero h1 {
+    font-size: 2.8rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6, #06b6d4);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 12px;
+    letter-spacing: -0.02em;
+  }
+
+  .hero p {
+    color: var(--muted);
+    font-size: 1.1rem;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(10, 14, 23, 0.85);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 20px;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  nav .inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    gap: 4px;
+    padding: 8px 0;
+  }
+
+  nav a {
+    color: var(--muted);
+    text-decoration: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  nav a:hover, nav a.active {
+    color: var(--text);
+    background: rgba(99,102,241,0.12);
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+
+  section {
+    margin: 48px 0;
+    scroll-margin-top: 70px;
+  }
+
+  section h2 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  section h2 .num {
+    background: var(--accent);
+    color: white;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+  }
+
+  section .desc {
+    color: var(--muted);
+    margin-bottom: 24px;
+    font-size: 0.95rem;
+    padding-left: 48px;
+  }
+
+  .diagram-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    overflow-x: auto;
+  }
+
+  .diagram-card .mermaid {
+    display: flex;
+    justify-content: center;
+  }
+
+  .diagram-card .mermaid svg {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 16px;
+    padding: 16px;
+    background: rgba(99,102,241,0.04);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+
+  .legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+  }
+
+  .info-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+
+  .info-box h4 {
+    font-size: 0.85rem;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+
+  .info-box p {
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+
+  .info-box code {
+    background: rgba(99,102,241,0.1);
+    color: var(--cyan);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.82rem;
+  }
+
+  .threshold-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 16px;
+    font-size: 0.85rem;
+  }
+
+  .threshold-table th {
+    text-align: left;
+    padding: 10px 12px;
+    background: rgba(99,102,241,0.08);
+    color: var(--accent);
+    font-weight: 600;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .threshold-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+  }
+
+  .threshold-table td:first-child {
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  .threshold-table code {
+    background: rgba(6,182,212,0.1);
+    color: var(--cyan);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  footer {
+    text-align: center;
+    padding: 48px 20px;
+    color: var(--muted);
+    font-size: 0.82rem;
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>Nightveil Flow Map</h1>
+  <p>Complete traffic flow diagram — every decision point, state machine, and branching path in the protocol</p>
+</div>
+
+<nav>
+  <div class="inner">
+    <a href="#full">Full Path</a>
+    <a href="#client">Client Init</a>
+    <a href="#auth">Authentication</a>
+    <a href="#server">Server Decisions</a>
+    <a href="#split">Split HTTP</a>
+    <a href="#proto">TCP vs UDP</a>
+    <a href="#throttle">Throttle FSM</a>
+    <a href="#rotation">Rotation</a>
+    <a href="#canary">Canary</a>
+    <a href="#middleware">Middleware</a>
+    <a href="#reconnect">Reconnect</a>
+  </div>
+</nav>
+
+<div class="container">
+
+<!-- ==================== 1. FULL PATH ==================== -->
+<section id="full">
+  <h2><span class="num">1</span> Full Connection Path</h2>
+  <p class="desc">End-to-end: от приложения на клиенте до целевого сервера и обратно. Каждый прямоугольник — реальный компонент кода.</p>
+  <div class="diagram-card">
+    <pre class="mermaid">
+flowchart TB
+    subgraph CLIENT ["CLIENT MACHINE"]
+        APP["App / Browser<br/><i>e.g. Firefox, Telegram</i>"]
+        SOCKS["SOCKS5 Server<br/><code>proxy.SOCKS5Handshake()</code><br/>127.0.0.1:1080"]
+        PROTO_C["Protocol Client<br/><code>proto.Handshake()</code><br/>CmdConnect / CmdUDP"]
+        MW_C["Middleware Chain<br/>Padding + Jitter"]
+
+        subgraph TRANSPORT ["Transport Stack"]
+            XHTTP_C["XHTTP Client<br/><code>xhttp.Client.Dial()</code>"]
+            RECONN["Reconnecting<br/><code>ReconnectingTransport</code><br/>Exponential backoff"]
+            POOL["Connection Pool<br/><code>PooledTransport</code><br/>Pre-established conns"]
+        end
+
+        subgraph ADAPTIVE ["Adaptive System"]
+            DETECT["Throttle Detector<br/>RTT + Throughput"]
+            ADAPT["Adaptive Controller<br/>1x — 8x parallel"]
+            ROTATE["Parameter Rotator<br/>L1: 5m / L2: 30m / L3: emergency"]
+            CANARY_C["Canary Probes<br/>Google / CF / Firefox"]
+        end
+
+        AUTH_C["Auth: Double ECDH<br/><code>ClientX25519.GenerateToken()</code>"]
+        TLS_C["uTLS Fingerprint<br/><code>security.NewUTLSHTTPClient()</code>"]
+    end
+
+    subgraph NETWORK ["NETWORK (DPI / TSPU)"]
+        DPI{"DPI Inspector<br/>15KB threshold<br/>Pattern analysis"}
+    end
+
+    subgraph SERVER ["SERVER"]
+        HTTP_S["HTTP Handler<br/><code>Server.ServeHTTP()</code>"]
+        AUTH_S["Auth Validator<br/><code>ServerX25519.Validate()</code>"]
+        FALLBACK["Fallback Handler<br/>Reverse proxy / Static"]
+        SESS["Session Manager<br/><code>session.GetOrCreate()</code>"]
+        XHTTP_S["XHTTP Server<br/>Upload reassembly<br/>Download streaming"]
+        PROTO_S["Protocol Server<br/><code>proto.HandleConnection()</code>"]
+        MW_S["Middleware Chain<br/>Padding removal"]
+
+        RELAY_TCP["TCP Relay<br/><code>proxy.Relay()</code><br/>Bidirectional io.Copy"]
+        RELAY_UDP["UDP Relay<br/><code>UDPRelayServer.Run()</code><br/>Per-dest sockets"]
+    end
+
+    TARGET["Target Server<br/>e.g. google.com:443"]
+
+    APP -->|"SOCKS5 CONNECT<br/>host:port"| SOCKS
+    SOCKS -->|"target address"| PROTO_C
+    PROTO_C --> MW_C
+    MW_C --> XHTTP_C
+    XHTTP_C --> RECONN
+    RECONN --> POOL
+    AUTH_C -.->|"nv_token cookie"| XHTTP_C
+    POOL -->|"HTTPS POST chunks<br/>8-14KB each"| TLS_C
+    POOL -->|"HTTPS GET stream"| TLS_C
+    TLS_C -->|"TLS 1.3 with<br/>spoofed fingerprint"| DPI
+
+    DPI -->|"Looks like normal<br/>HTTPS traffic"| HTTP_S
+
+    HTTP_S -->|"extract nv_token"| AUTH_S
+    AUTH_S -->|"VALID"| SESS
+    AUTH_S -->|"INVALID"| FALLBACK
+    FALLBACK -->|"200 OK<br/>real website"| DPI
+
+    SESS --> XHTTP_S
+    XHTTP_S -->|"splitConn"| PROTO_S
+    PROTO_S --> MW_S
+
+    MW_S -->|"CmdConnect"| RELAY_TCP
+    MW_S -->|"CmdUDP"| RELAY_UDP
+
+    RELAY_TCP -->|"net.Dial TCP"| TARGET
+    RELAY_UDP -->|"net.DialUDP"| TARGET
+
+    TARGET -->|"response data"| RELAY_TCP
+    TARGET -->|"UDP packets"| RELAY_UDP
+
+    DETECT -.->|"state change"| ADAPT
+    ADAPT -.->|"scale conns"| POOL
+    ADAPT -.->|"rotate signal"| ROTATE
+    ROTATE -.->|"new params"| XHTTP_C
+    CANARY_C -.->|"blocked!"| ROTATE
+    CANARY_C -.->|"RTT samples"| DETECT
+
+    XHTTP_C -.->|"dial RTT"| DETECT
+    RELAY_TCP -.->|"throughput"| DETECT
+
+    style CLIENT fill:#111827,stroke:#6366f1,stroke-width:2px,color:#e2e8f0
+    style SERVER fill:#111827,stroke:#10b981,stroke-width:2px,color:#e2e8f0
+    style NETWORK fill:#1a1020,stroke:#ef4444,stroke-width:2px,color:#e2e8f0
+    style TRANSPORT fill:#0f1729,stroke:#6366f1,stroke-width:1px,color:#e2e8f0
+    style ADAPTIVE fill:#0f1729,stroke:#f59e0b,stroke-width:1px,color:#e2e8f0
+    style FALLBACK fill:#1c1017,stroke:#ef4444,color:#e2e8f0
+    style DPI fill:#2a1020,stroke:#ef4444,color:#e2e8f0
+    style TARGET fill:#0a1a15,stroke:#10b981,color:#e2e8f0
+    </pre>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#6366f1"></div> Client-side components</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#10b981"></div> Server-side components</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div> Adversary / DPI zone</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div> Adaptive anti-throttle system</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#64748b"></div> Dotted = feedback / control signals</div>
+  </div>
+</section>
+
+<!-- ==================== 2. CLIENT INIT ==================== -->
+<section id="client">
+  <h2><span class="num">2</span> Client Initialization</h2>
+  <p class="desc">Последовательность запуска клиента: от парсинга конфига до готовности принимать SOCKS5.</p>
+  <div class="diagram-card">
+    <pre class="mermaid">
+flowchart TD
+    START(["nv connect"]) --> PARSE_ARG{"Argument type?"}
+
+    PARSE_ARG -->|"nightveil://..."| PARSE_URI["config.ParseURI()<br/>Decode key, host, port,<br/>shortID, name from URI"]
+    PARSE_ARG -->|"path to .yaml"| PARSE_YAML["config.Load()<br/>Parse YAML config file"]
+    PARSE_ARG -->|"-config flag"| PARSE_YAML
+
+    PARSE_URI --> AUTH_SETUP
+    PARSE_YAML --> AUTH_SETUP
+
+    AUTH_SETUP["Decode Keys<br/>auth.DecodeKey(serverPub)<br/>auth.DecodeKey(userPriv)"]
+    AUTH_SETUP --> HAS_UPK{"UserPrivateKey<br/>provided?"}
+
+    HAS_UPK -->|"Yes"| DERIVE["DerivePublicKey()<br/>userPub = X25519(userPriv, base)"]
+    HAS_UPK -->|"No"| GEN_EPH["GenerateUserKeypair()<br/>Random ephemeral (legacy)"]
+
+    DERIVE --> CREATE_AUTH["Create ClientX25519<br/>{serverPub, userPriv,<br/>userPub, shortID}"]
+    GEN_EPH --> CREATE_AUTH
+
+    CREATE_AUTH --> THROTTLE_INIT
+
+    subgraph THROTTLE_INIT ["Throttle System Init"]
+        DET["NewDetector()<br/>RTT: 500ms / Tput: 70%<br/>Window: 20 / Confirm: 3"]
+        ADP["NewAdaptive()<br/>Base: 1 / Max: 8 conns<br/>Strategy: both"]
+        ROT["NewRotator()<br/>L1: 5min / L2: 30min<br/>Emergency: on"]
+        CAN["NewCanary()<br/>Interval: 30s / Thresh: 3"]
+
+        DET --> ADP
+        ADP --> ROT
+        ROT --> CAN
+    end
+
+    THROTTLE_INIT --> TLS_SETUP{"TLS fingerprint<br/>configured?"}
+
+    TLS_SETUP -->|"Yes"| UTLS["NewUTLSHTTPClient()<br/>Chrome/Firefox/Safari<br/>fingerprint spoofing"]
+    TLS_SETUP -->|"No"| PLAIN["Plain http.Client<br/>Timeout: 30s"]
+
+    UTLS --> STACK
+    PLAIN --> STACK
+
+    subgraph STACK ["Build Transport Stack"]
+        direction LR
+        X["XHTTP Client<br/>(base)"] --> R["Reconnecting<br/>Wrapper"] --> P["Pooled<br/>Transport"]
+    end
+
+    STACK --> START_BG["Start Background:<br/>rotator.Start()<br/>canary.Start()"]
+    START_BG --> LISTEN["net.Listen TCP<br/>127.0.0.1:1080"]
+    LISTEN --> READY(["Ready: Accept Loop"])
+
+    style START fill:#6366f1,color:white
+    style READY fill:#10b981,color:white
+    style THROTTLE_INIT fill:#1a1520,stroke:#f59e0b,color:#e2e8f0
+    style STACK fill:#0f1729,stroke:#6366f1,color:#e2e8f0
+    </pre>
+  </div>
+</section>
+
+<!-- ==================== 3. AUTHENTICATION ==================== -->
+<section id="auth">
+  <h2><span class="num">3</span> Double ECDH Authentication</h2>
+  <p class="desc">Генерация токена на клиенте и валидация на сервере. Forward secrecy через эфемерные ключи.</p>
+  <div class="diagram-card">
+    <pre class="mermaid">
+flowchart TD
+    subgraph CLIENT_AUTH ["CLIENT: GenerateToken()"]
+        EPH["Generate Ephemeral Keypair<br/><code>ephPriv = random 32B</code><br/><code>ephPub = X25519(ephPriv, BASE)</code>"]
+        ECDH1["ECDH #1: Ephemeral<br/><code>sharedEph = X25519(ephPriv, serverPub)</code><br/>32 bytes"]
+        ECDH2["ECDH #2: Per-User<br/><code>sharedUser = X25519(userPriv, serverPub)</code><br/>32 bytes"]
+        COMBINE["Combine Secrets<br/><code>combined = sharedEph || sharedUser</code><br/>64 bytes"]
+        HKDF["Key Derivation<br/><code>HKDF-SHA256(combined,<br/>salt=shortID||timestamp,<br/>info='nv-auth-v2')</code><br/>32-byte auth key"]
+        SEAL["AEAD Encrypt<br/><code>ChaCha20-Poly1305.Seal(<br/>plaintext=sessionID,<br/>key=authKey, nonce=0)</code><br/>32 bytes ciphertext"]
+        TOKEN["Assemble Token<br/><code>ephPub(32) || userPub(32) ||<br/>sidLen(1) || shortID(0-8) ||<br/>timestamp(8) || ciphertext(32)</code><br/>= 105-113 bytes"]
+        B64["Base64 Encode<br/>Set as cookie: <code>nv_token=...</code>"]
+
+        EPH --> ECDH1
+        EPH --> ECDH2
+        ECDH1 --> COMBINE
+        ECDH2 --> COMBINE
+        COMBINE --> HKDF
+        HKDF --> SEAL
+        SEAL --> TOKEN
+        TOKEN --> B64
+    end
+
+    B64 -->|"HTTP Cookie<br/>nv_token=base64"| NETWORK["Network Transit<br/>(opaque to DPI)"]
+
+    NETWORK --> EXTRACT
+
+    subgraph SERVER_AUTH ["SERVER: Validate()"]
+        EXTRACT["Extract & Decode Token<br/>Parse: ephPub, userPub,<br/>shortID, timestamp, ciphertext"]
+        LOOKUP{"Lookup user<br/>by shortID hex?"}
+        LOOKUP -->|"Not found"| FAIL1["ErrAuthFailed"]
+        LOOKUP -->|"Found"| CHECK_UPK{"User has<br/>registered pubkey?"}
+
+        CHECK_UPK -->|"Yes: pubkey != 0"| VERIFY_PK{"userPub from token<br/>== registered pubkey?"}
+        CHECK_UPK -->|"No: legacy mode"| S_ECDH
+
+        VERIFY_PK -->|"Mismatch"| FAIL2["ErrAuthFailed"]
+        VERIFY_PK -->|"Match"| CHECK_TS
+
+        CHECK_TS{"|now - ts| <= 60s?"}
+        CHECK_TS -->|"No: replay/stale"| FAIL3["ErrAuthFailed"]
+        CHECK_TS -->|"Yes"| S_ECDH
+
+        S_ECDH["Server Double ECDH<br/><code>sharedEph = X25519(serverPriv, ephPub)</code><br/><code>sharedUser = X25519(serverPriv, userPub)</code>"]
+        S_HKDF["Same HKDF derivation<br/><code>authKey = HKDF(combined, salt, info)</code>"]
+        S_OPEN["AEAD Decrypt<br/><code>ChaCha20-Poly1305.Open(ciphertext)</code>"]
+        S_CHECK{"Decryption<br/>succeeded?"}
+
+        S_ECDH --> S_HKDF --> S_OPEN --> S_CHECK
+        S_CHECK -->|"No"| FAIL4["ErrAuthFailed"]
+        S_CHECK -->|"Yes"| SUCCESS["Return sessionID<br/>16 bytes"]
+    end
+
+    FAIL1 --> FALLBACK_OUT["Serve Fallback Website"]
+    FAIL2 --> FALLBACK_OUT
+    FAIL3 --> FALLBACK_OUT
+    FAIL4 --> FALLBACK_OUT
+    SUCCESS --> PROCEED["Route to handleUpload /<br/>handleDownload"]
+
+    style CLIENT_AUTH fill:#111827,stroke:#6366f1,stroke-width:2px,color:#e2e8f0
+    style SERVER_AUTH fill:#111827,stroke:#10b981,stroke-width:2px,color:#e2e8f0
+    style FAIL1 fill:#2a1020,stroke:#ef4444,color:#ef4444
+    style FAIL2 fill:#2a1020,stroke:#ef4444,color:#ef4444
+    style FAIL3 fill:#2a1020,stroke:#ef4444,color:#ef4444
+    style FAIL4 fill:#2a1020,stroke:#ef4444,color:#ef4444
+    style FALLBACK_OUT fill:#2a1020,stroke:#ef4444,color:#e2e8f0
+    style SUCCESS fill:#0a1a15,stroke:#10b981,color:#10b981
+    style PROCEED fill:#0a1a15,stroke:#10b981,color:#e2e8f0
+    style NETWORK fill:#1a1020,stroke:#ef4444,color:#e2e8f0
+    </pre>
+  </div>
+  <div class="info-grid">
+    <div class="info-box">
+      <h4>Forward Secrecy</h4>
+      <p>Каждый запрос генерирует новую эфемерную пару <code>ephPriv/ephPub</code>. Даже если <code>userPriv</code> скомпрометирован, прошлые сессии не дешифруются.</p>
+    </div>
+    <div class="info-box">
+      <h4>Anti-Replay</h4>
+      <p>Timestamp в токене с окном <code>+-60s</code>. Повторная отправка перехваченного токена за пределами окна отклоняется.</p>
+    </div>
+    <div class="info-box">
+      <h4>User Binding</h4>
+      <p>Double ECDH: <code>sharedEph</code> доказывает владение эфемерным ключом, <code>sharedUser</code> доказывает принадлежность к зарегистрированному пользователю.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 4. SERVER DECISIONS ==================== -->
+<section id="server">
+  <h2><span class="num">4</span> Server Decision Tree</h2>
+  <p class="desc">Все точки принятия решений на сервере: от HTTP-запроса до relay или fallback.</p>
+  <div class="diagram-card">
+    <pre class="mermaid">
+flowchart TD
+    REQ(["HTTP Request arrives"]) --> EXTRACT["Extract token<br/><code>Cookie: nv_token=...</code><br/>or Header: nv_token"]
+
+    EXTRACT --> HAS_TOKEN{"Token<br/>present?"}
+
+    HAS_TOKEN -->|"No"| FB1["FALLBACK:<br/>Serve real website"]
+    HAS_TOKEN -->|"Yes"| VALIDATE["ServerX25519.Validate()"]
+
+    VALIDATE --> VALID{"Auth<br/>valid?"}
+    VALID -->|"No: bad key/ts/user"| FB2["FALLBACK:<br/>Serve real website"]
+    VALID -->|"Yes: sessionID extracted"| METHOD{"HTTP<br/>Method?"}
+
+    METHOD -->|"POST"| UPLOAD["handleUpload()"]
+    METHOD -->|"GET"| DOWNLOAD["handleDownload()"]
+    METHOD -->|"Other"| FB3["FALLBACK:<br/>Serve real website"]
+
+    UPLOAD --> PARSE_SEQ["Parse ?seq=N<br/>Read body (max 14KB + 1KB)"]
+    PARSE_SEQ --> PUSH["session.PushUpload(seq, data)<br/>Store in uploadBuf[seq]<br/>Signal uploadCond"]
+    PUSH --> TRY_EMIT1["tryEmit(): both<br/>upload + download ready?"]
+    TRY_EMIT1 -->|"No: waiting for GET"| OK1["200 OK<br/>(no body)"]
+    TRY_EMIT1 -->|"Yes + first time"| EMIT
+
+    DOWNLOAD --> MARK["MarkConnected()<br/>Close connected channel"]
+    MARK --> TRY_EMIT2["tryEmit(): both<br/>upload + download ready?"]
+    TRY_EMIT2 -->|"Already emitted"| STREAM
+    TRY_EMIT2 -->|"First time"| EMIT
+
+    EMIT["Create splitConn<br/>Send to acceptCh"] --> STREAM
+
+    STREAM["Stream response:<br/>Content-Type: octet-stream<br/>X-Accel-Buffering: no<br/>Continuous flush loop"]
+
+    EMIT --> HANDLE["handleTunnel():<br/>Accept from acceptCh"]
+
+    HANDLE --> READ_FRAME["ReadFrame() from splitConn<br/>Parse [2B len][1B type][payload]"]
+
+    READ_FRAME --> CMD{"Protocol<br/>Command?"}
+
+    CMD -->|"0x01 CONNECT"| TCP_DIAL["net.DialTimeout(target, 10s)"]
+    CMD -->|"0x04 UDP"| UDP_SETUP["Create UDPRelayServer"]
+    CMD -->|"Other"| REFUSE["SendACK(StatusRefused)"]
+
+    TCP_DIAL --> DIAL_OK{"Dial<br/>success?"}
+    DIAL_OK -->|"No"| ACK_FAIL["SendACK(StatusUnreachable)"]
+    DIAL_OK -->|"Yes"| ACK_OK["SendACK(StatusOK)"]
+    ACK_OK --> RELAY_BI["proxy.Relay()<br/>Bidirectional io.Copy<br/>client <--> target"]
+
+    UDP_SETUP --> ACK_UDP["SendACK(StatusOK)"]
+    ACK_UDP --> UDP_LOOP["UDP message loop<br/>Per-dest sockets<br/>60s idle timeout"]
+
+    subgraph FALLBACK_MODES ["Fallback Modes"]
+        FB1
+        FB2
+        FB3
+        FB1 --> FB_DECIDE{"Fallback<br/>mode?"}
+        FB2 --> FB_DECIDE
+        FB3 --> FB_DECIDE
+        FB_DECIDE -->|"reverse_proxy"| RPROXY["Proxy to upstream<br/>e.g. blog.example.com"]
+        FB_DECIDE -->|"static"| FSTATIC["Serve files<br/>from disk"]
+        FB_DECIDE -->|"default"| FHTML["200 OK<br/>'It works!' HTML"]
+    end
+
+    style REQ fill:#6366f1,color:white
+    style FALLBACK_MODES fill:#1c1017,stroke:#ef4444,color:#e2e8f0
+    style FB1 fill:#2a1020,stroke:#ef4444,color:#ef4444
+    style FB2 fill:#2a1020,stroke:#ef4444,color:#ef4444
+    style FB3 fill:#2a1020,stroke:#ef4444,color:#ef4444
+    style ACK_FAIL fill:#2a1020,stroke:#ef4444,color:#ef4444
+    style REFUSE fill:#2a1020,stroke:#ef4444,color:#ef4444
+    style RELAY_BI fill:#0a1a15,stroke:#10b981,color:#10b981
+    style UDP_LOOP fill:#0a1a15,stroke:#10b981,color:#10b981
+    </pre>
+  </div>
+</section>
+
+<!-- ==================== 5. SPLIT HTTP ==================== -->
+<section id="split">
+  <h2><span class="num">5</span> Split HTTP Transport</h2>
+  <p class="desc">Как туннель разделяется на два независимых HTTP-потока: GET (скачивание) и POST (загрузка).</p>
+  <div class="diagram-card">
+    <pre class="mermaid">
+flowchart LR
+    subgraph CLIENT ["Client"]
+        APP_W["App writes data<br/>(e.g. HTTP request)"]
+        CHUNK["Split into chunks<br/>max 14KB each<br/>(under TSPU threshold)"]
+        POST1["POST /x7k/u/p3q<br/>?seq=0&cf_tok=sess<br/>Cookie: nv_token=..."]
+        POST2["POST /x7k/u/p3q<br/>?seq=1&cf_tok=sess"]
+        POST3["POST /x7k/u/p3q<br/>?seq=2&cf_tok=sess"]
+
+        APP_R["App reads data<br/>(e.g. HTTP response)"]
+        GET1["GET /x7k/d/r8w<br/>?cf_tok=sess<br/>Cookie: nv_token=..."]
+
+        APP_W --> CHUNK
+        CHUNK --> POST1
+        CHUNK --> POST2
+        CHUNK --> POST3
+        GET1 --> APP_R
+    end
+
+    subgraph NETWORK ["Network"]
+        N1["Separate HTTP<br/>requests — DPI sees<br/>independent traffic"]
+    end
+
+    subgraph SERVER ["Server"]
+        RECV_POST["handleUpload()<br/>for each POST"]
+        REASM["Upload Buffer<br/>uploadBuf[seq] = data<br/>Reorder by seq#"]
+        SEQ_READ["Sequential Read<br/>nextSeq: 0, 1, 2..."]
+
+        RECV_GET["handleDownload()<br/>Long-lived response"]
+        PIPE["Download Pipe<br/>PipeWriter writes<br/>response body streams"]
+
+        SPLIT["splitConn<br/>Read = upload queue<br/>Write = download pipe"]
+
+        RECV_POST --> REASM --> SEQ_READ
+        SEQ_READ --> SPLIT
+        RECV_GET --> PIPE
+        PIPE --> SPLIT
+    end
+
+    POST1 --> N1
+    POST2 --> N1
+    POST3 --> N1
+    N1 --> RECV_POST
+
+    RECV_GET --> N1
+    N1 --> GET1
+
+    style CLIENT fill:#111827,stroke:#6366f1,stroke-width:2px,color:#e2e8f0
+    style SERVER fill:#111827,stroke:#10b981,stroke-width:2px,color:#e2e8f0
+    style NETWORK fill:#1a1020,stroke:#ef4444,color:#e2e8f0
+    </pre>
+  </div>
+  <div class="info-grid">
+    <div class="info-box">
+      <h4>Upload (POST)</h4>
+      <p>Данные нарезаются на чанки по <code>maxChunkSize</code> (8-14KB). Каждый чанк — отдельный POST с <code>seq=N</code>. Сервер переупорядочивает по sequence number.</p>
+    </div>
+    <div class="info-box">
+      <h4>Download (GET)</h4>
+      <p>Один долгоживущий GET-запрос. Сервер стримит данные в response body с <code>Transfer-Encoding: chunked</code> и постоянным flush.</p>
+    </div>
+    <div class="info-box">
+      <h4>Anti-DPI</h4>
+      <p>DPI видит обычные HTTP GET/POST на CDN-подобные пути. Чанки <code>&lt;15KB</code> — под порогом обнаружения ТСПУ. Пути рандомизируются каждые 30 минут.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 6. TCP vs UDP ==================== -->
+<section id="proto">
+  <h2><span class="num">6</span> Protocol: TCP vs UDP Paths</h2>
+  <p class="desc">Как расходятся потоки после протокольного хендшейка — TCP relay vs UDP relay с per-dest сокетами.</p>
+  <div class="diagram-card">
+    <pre class="mermaid">
+flowchart TD
+    SOCKS(["SOCKS5 Request"]) --> SOCKS_CMD{"SOCKS5<br/>Command?"}
+
+    SOCKS_CMD -->|"0x01 CONNECT<br/>(TCP)"| TCP_PATH
+    SOCKS_CMD -->|"0x03 UDP ASSOCIATE"| UDP_PATH
+
+    subgraph TCP_PATH ["TCP Path"]
+        direction TB
+        T_HAND["Client sends frame:<br/>CmdConnect (0x01)<br/>[atyp][host][port]"]
+        T_DIAL["Server: net.Dial(target)"]
+        T_ACK{"Server dial<br/>success?"}
+        T_ACK_OK["Server sends:<br/>CmdACK + StatusOK"]
+        T_ACK_FAIL["Server sends:<br/>CmdACK + StatusUnreachable"]
+        T_RELAY["Bidirectional Relay<br/><code>io.Copy</code> both dirs<br/>First EOF closes both"]
+        T_STATS["Collect stats:<br/>BytesSent, BytesRecv<br/>Duration, Throughput"]
+
+        T_HAND --> T_DIAL --> T_ACK
+        T_ACK -->|"Yes"| T_ACK_OK --> T_RELAY --> T_STATS
+        T_ACK -->|"No"| T_ACK_FAIL
+    end
+
+    subgraph UDP_PATH ["UDP Path"]
+        direction TB
+        U_HAND["Client sends frame:<br/>CmdUDP (0x04)<br/>[bind addr info]"]
+        U_ACK["Server sends:<br/>CmdACK + StatusOK"]
+        U_RELAY["UDP Relay Server<br/>Message-based framing"]
+
+        U_MSG_IN["Client message in:<br/>[2B len][atyp][addr][port][payload]"]
+        U_LOOKUP{"Dest socket<br/>exists?"}
+        U_CREATE["net.DialUDP(dest)<br/>+ spawn readFromDest()"]
+        U_REUSE["Reuse existing socket"]
+        U_SEND["socket.Write(payload)"]
+
+        U_RECV["readFromDest():<br/>socket.ReadFromUDP()"]
+        U_MSG_OUT["Write back to client:<br/>[2B len][atyp][addr][port][payload]"]
+        U_TIMEOUT{"Socket idle<br/>> 60s?"}
+        U_CLOSE["Close & delete socket"]
+
+        U_HAND --> U_ACK --> U_RELAY
+        U_RELAY --> U_MSG_IN
+        U_MSG_IN --> U_LOOKUP
+        U_LOOKUP -->|"No"| U_CREATE --> U_SEND
+        U_LOOKUP -->|"Yes"| U_REUSE --> U_SEND
+
+        U_RECV --> U_MSG_OUT
+        U_RECV --> U_TIMEOUT
+        U_TIMEOUT -->|"Yes"| U_CLOSE
+        U_TIMEOUT -->|"No"| U_RECV
+    end
+
+    T_STATS -->|"throughput"| DETECTOR["Feed to<br/>Throttle Detector"]
+
+    style SOCKS fill:#6366f1,color:white
+    style TCP_PATH fill:#0f1729,stroke:#6366f1,color:#e2e8f0
+    style UDP_PATH fill:#0f172a,stroke:#06b6d4,color:#e2e8f0
+    style T_ACK_FAIL fill:#2a1020,stroke:#ef4444,color:#ef4444
+    style U_CLOSE fill:#2a1020,stroke:#ef4444,color:#ef4444
+    style T_RELAY fill:#0a1a15,stroke:#10b981,color:#10b981
+    style DETECTOR fill:#1a1520,stroke:#f59e0b,color:#e2e8f0
+    </pre>
+  </div>
+</section>
+
+<!-- ==================== 7. THROTTLE FSM ==================== -->
+<section id="throttle">
+  <h2><span class="num">7</span> Throttle Detection State Machine</h2>
+  <p class="desc">Конечный автомат детектора троттлинга: метрики, пороги, переходы состояний, реакции.</p>
+  <div class="diagram-card">
+    <pre class="mermaid">
+stateDiagram-v2
+    [*] --> Normal : Startup (baseline learning)
+
+    Normal --> Suspected : RTT > 500ms AND > 3x baseline\nOR throughput drop > 70%
+    Suspected --> Normal : Metrics cleared\n(suspectedCount = 0)
+    Suspected --> Throttled : suspectedCount >= 3\n(3 consecutive suspected samples)
+    Throttled --> Normal : Metrics cleared\n(suspectedCount = 0)
+
+    state Normal {
+        [*] --> Monitoring
+        Monitoring --> Monitoring : RecordRTT() / RecordThroughput()\nupdates sliding window (20 samples)
+        Monitoring --> BaselineLearning : First 5 samples
+        BaselineLearning --> Monitoring : Baseline established\nmedianRTT + avgThroughput
+    }
+
+    state Suspected {
+        [*] --> Counting
+        Counting --> Counting : Each bad sample:\nsuspectedCount++
+    }
+
+    state Throttled {
+        [*] --> Active
+        Active --> ScaleUp : Adaptive: conns *= 2 (max 8)
+        ScaleUp --> Rotate : Emergency rotation triggered
+        Rotate --> Active : New params applied
+    }
+    </pre>
+  </div>
+
+  <div class="info-grid">
+    <div class="info-box">
+      <h4>Normal State</h4>
+      <p>Collecting baseline from first 5 samples. <code>medianRTT</code> and <code>avgThroughput</code> established. Window: last 20 samples.</p>
+    </div>
+    <div class="info-box">
+      <h4>Suspected State</h4>
+      <p>RTT spike or throughput drop detected. <code>suspectedCount</code> increments. Need <code>3</code> consecutive hits to confirm. Single good sample resets to Normal.</p>
+    </div>
+    <div class="info-box">
+      <h4>Throttled State</h4>
+      <p>Confirmed. Adaptive doubles parallel conns: <code>1 -> 2 -> 4 -> 8</code>. Emergency rotation fires: all params + paths randomized immediately.</p>
+    </div>
+  </div>
+
+  <table class="threshold-table">
+    <thead>
+      <tr><th>Metric</th><th>Threshold</th><th>Condition</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>RTT Spike (absolute)</td><td><code>500ms</code></td><td>Recent RTT > RTTSpikeMs</td></tr>
+      <tr><td>RTT Spike (relative)</td><td><code>3x baseline</code></td><td>Recent RTT > 3 * medianRTT</td></tr>
+      <tr><td>Throughput Drop</td><td><code>70%</code></td><td>Drop % = (1 - recent/baseline) * 100</td></tr>
+      <tr><td>Confirmation</td><td><code>3 samples</code></td><td>Consecutive suspected evaluations</td></tr>
+      <tr><td>Window Size</td><td><code>20 samples</code></td><td>Sliding window for RTT and throughput</td></tr>
+      <tr><td>Scale Factor</td><td><code>2x per step</code></td><td>1 -> 2 -> 4 -> 8 parallel conns</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ==================== 8. ROTATION ==================== -->
+<section id="rotation">
+  <h2><span class="num">8</span> Parameter Rotation (3 Levels)</h2>
+  <p class="desc">Трёхуровневая ротация параметров: от бесшовной смены padding до экстренной перегенерации всего.</p>
+  <div class="diagram-card">
+    <pre class="mermaid">
+flowchart TD
+    subgraph L1 ["LEVEL 1: Param Rotation (every 5 min)"]
+        L1_TICK["Timer fires<br/>ParamRotateInterval"] --> L1_ROT["rotateParams()"]
+        L1_ROT --> L1_PAD["PaddingMin: rand(32-128)<br/>PaddingMax: rand(128-512)"]
+        L1_ROT --> L1_CHUNK["ChunkSize: rand(8192-14336)<br/>(stays under 15KB)"]
+        L1_ROT --> L1_JITTER["JitterMin: rand(5-30)ms<br/>JitterMax: rand(30-100)ms"]
+        L1_PAD --> L1_CB["onParamRotate callback<br/>Seamless: no reconnect"]
+        L1_CHUNK --> L1_CB
+        L1_JITTER --> L1_CB
+    end
+
+    subgraph L2 ["LEVEL 2: Session Rotation (every 30 min)"]
+        L2_TICK["Timer fires<br/>SessionRotateInterval"] --> L2_ROT["rotateSession() -> randomizeAll()"]
+        L2_ROT --> L2_ALL["ALL Level 1 params<br/>+"]
+        L2_ROT --> L2_PATH["PathPrefix: /rand(6)<br/>UploadPath: /u/rand(3)<br/>DownloadPath: /d/rand(3)"]
+        L2_ROT --> L2_SESS["SessionKey: rand(5)"]
+        L2_ALL --> L2_CB["onSessionRotate callback<br/>Requires reconnect!"]
+        L2_PATH --> L2_CB
+        L2_SESS --> L2_CB
+    end
+
+    subgraph L3 ["LEVEL 3: Emergency Rotation (on detection)"]
+        L3_TRIG1["Throttle Detector:<br/>StateThrottled"] --> L3_FIRE
+        L3_TRIG2["Canary:<br/>CanaryBlocked"] --> L3_FIRE
+        L3_FIRE["EmergencyRotateNow()"] --> L3_FULL["Full randomizeAll()<br/>Same as Level 2"]
+        L3_FULL --> L3_CB["Fire BOTH callbacks<br/>Immediate, not scheduled"]
+    end
+
+    L1_CB -->|"Next connection uses<br/>new chunk/padding/jitter"| EFFECT1["In-flight: unchanged<br/>New SOCKS5 conns: new params"]
+    L2_CB -->|"New paths = new<br/>HTTP endpoints"| EFFECT2["Existing sessions continue<br/>New sessions: new paths"]
+    L3_CB -->|"Immediately randomize<br/>everything"| EFFECT3["Emergency: break out<br/>of throttled pattern"]
+
+    style L1 fill:#0f172a,stroke:#10b981,stroke-width:2px,color:#e2e8f0
+    style L2 fill:#0f172a,stroke:#f59e0b,stroke-width:2px,color:#e2e8f0
+    style L3 fill:#1c1017,stroke:#ef4444,stroke-width:2px,color:#e2e8f0
+    style L3_TRIG1 fill:#2a1020,stroke:#ef4444,color:#ef4444
+    style L3_TRIG2 fill:#2a1020,stroke:#ef4444,color:#ef4444
+    </pre>
+  </div>
+
+  <table class="threshold-table">
+    <thead>
+      <tr><th>Parameter</th><th>Range</th><th>Rotated at Level</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>PaddingMin</td><td><code>[32, 128] bytes</code></td><td>L1, L2, L3</td></tr>
+      <tr><td>PaddingMax</td><td><code>[128, 512] bytes</code></td><td>L1, L2, L3</td></tr>
+      <tr><td>ChunkSize</td><td><code>[8192, 14336] bytes</code></td><td>L1, L2, L3</td></tr>
+      <tr><td>JitterMin</td><td><code>[5, 30] ms</code></td><td>L1, L2, L3</td></tr>
+      <tr><td>JitterMax</td><td><code>[30, 100] ms</code></td><td>L1, L2, L3</td></tr>
+      <tr><td>PathPrefix</td><td><code>/[a-z0-9]{6}</code></td><td>L2, L3 only</td></tr>
+      <tr><td>UploadPath</td><td><code>/u/[a-z0-9]{3}</code></td><td>L2, L3 only</td></tr>
+      <tr><td>DownloadPath</td><td><code>/d/[a-z0-9]{3}</code></td><td>L2, L3 only</td></tr>
+      <tr><td>SessionKey</td><td><code>[a-z0-9]{5}</code></td><td>L2, L3 only</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ==================== 9. CANARY ==================== -->
+<section id="canary">
+  <h2><span class="num">9</span> Canary Detection System</h2>
+  <p class="desc">Фоновые зонды через туннель для обнаружения вмешательства ТСПУ в реальном времени.</p>
+  <div class="diagram-card">
+    <pre class="mermaid">
+flowchart TD
+    START(["Canary.Start()<br/>Interval: 30s"]) --> PROBE["Probe all endpoints:<br/>google.com/generate_204<br/>cp.cloudflare.com<br/>detectportal.firefox.com"]
+
+    PROBE --> RESULTS{"Count results"}
+
+    RESULTS -->|"All success<br/>(0 failures)"| OK["CanaryOK<br/>consecutiveFails = 0"]
+    RESULTS -->|"Mixed results<br/>(some fail)"| DEGRADED["CanaryDegraded<br/>consecutiveFails++"]
+    RESULTS -->|"All failed"| ALL_FAIL["CanaryDegraded<br/>consecutiveFails++"]
+
+    OK -->|"RTT from probes"| FEED_RTT["Feed RTT to<br/>Throttle Detector"]
+    OK -->|"Wait 30s"| PROBE
+
+    DEGRADED --> CHECK_THRESH{"consecutiveFails<br/>>= 3?"}
+    ALL_FAIL --> CHECK_THRESH
+
+    CHECK_THRESH -->|"No"| WAIT["Wait 30s"] --> PROBE
+    CHECK_THRESH -->|"Yes"| BLOCKED["CanaryBlocked!"]
+
+    BLOCKED --> EMERGENCY["rotator.EmergencyRotateNow()<br/>Full param + path rotation"]
+    BLOCKED --> LOG["Log: TSPU interference<br/>detected"]
+    EMERGENCY --> WAIT2["Wait 30s<br/>(with new params)"] --> PROBE
+
+    FEED_RTT --> WAIT3["Wait 30s"] --> PROBE
+
+    style START fill:#6366f1,color:white
+    style OK fill:#0a1a15,stroke:#10b981,color:#10b981
+    style DEGRADED fill:#1a1a10,stroke:#f59e0b,color:#f59e0b
+    style BLOCKED fill:#2a1020,stroke:#ef4444,color:#ef4444
+    style ALL_FAIL fill:#1a1a10,stroke:#f59e0b,color:#f59e0b
+    style EMERGENCY fill:#2a1020,stroke:#ef4444,color:#e2e8f0
+    </pre>
+  </div>
+</section>
+
+<!-- ==================== 10. MIDDLEWARE ==================== -->
+<section id="middleware">
+  <h2><span class="num">10</span> Middleware Pipeline</h2>
+  <p class="desc">Слои обработки данных: padding, jitter, traffic shaping, cover traffic.</p>
+  <div class="diagram-card">
+    <pre class="mermaid">
+flowchart LR
+    subgraph WRITE_PATH ["Write Path (Client -> Server)"]
+        direction LR
+        APP_OUT["App data"] --> PAD_W["Padding<br/>Add [2B len][2B padLen]<br/>[data][random bytes]<br/>32-512 bytes padding"]
+        PAD_W --> JIT_W["Jitter<br/>Sleep rand(5-100)ms<br/>before write"]
+        JIT_W --> SHAPE_W["Shaping<br/>(optional)<br/>Browsing: bursts<br/>Streaming: rate limit"]
+        SHAPE_W --> XHTTP_OUT["XHTTP POST<br/>chunks"]
+    end
+
+    subgraph READ_PATH ["Read Path (Server -> Client)"]
+        direction RL
+        XHTTP_IN["XHTTP GET<br/>stream"] --> SHAPE_R["Shaping<br/>(optional)<br/>Rate pacing"]
+        SHAPE_R --> JIT_R["Jitter<br/>Sleep rand(5-100)ms<br/>(if not WriteOnly)"]
+        JIT_R --> PAD_R["Padding<br/>Read header<br/>Discard padding<br/>Return real data"]
+        PAD_R --> APP_IN["App data"]
+    end
+
+    subgraph COVER ["Cover Traffic (Background)"]
+        direction TB
+        COV_TIMER["Every 2-10s"] --> COV_REQ["GET/HEAD to:<br/>google.com/gen_204<br/>cloudflare.com<br/>ubuntu.com<br/>gstatic.com"]
+        COV_REQ --> COV_NOISE["Creates background<br/>noise indistinguishable<br/>from real traffic"]
+    end
+
+    style WRITE_PATH fill:#0f172a,stroke:#6366f1,color:#e2e8f0
+    style READ_PATH fill:#0f172a,stroke:#10b981,color:#e2e8f0
+    style COVER fill:#0f172a,stroke:#f59e0b,color:#e2e8f0
+    </pre>
+  </div>
+  <div class="info-grid">
+    <div class="info-box">
+      <h4>Padding</h4>
+      <p>Wire format: <code>[2B realLen][2B padLen][data][random]</code>. Скрывает реальный размер пакетов. Max frame: 65535 bytes.</p>
+    </div>
+    <div class="info-box">
+      <h4>Jitter</h4>
+      <p>Рандомные задержки <code>5-100ms</code> на каждый Write. Ломает cross-layer RTT fingerprinting (NDSS 2025 атака). Без jitter: TCP RTT 20ms, TLS 120ms — дельта выдаёт прокси.</p>
+    </div>
+    <div class="info-box">
+      <h4>Traffic Shaping</h4>
+      <p>Profiles: <code>Browsing</code> (bursts + pauses), <code>Streaming</code> (steady 500KB/s), <code>Idle</code> (1-5s gaps). Auto-detect по read/write ratio.</p>
+    </div>
+    <div class="info-box">
+      <h4>Cover Traffic</h4>
+      <p>Фоновые GET/HEAD запросы каждые <code>2-10s</code> к CDN/portal endpoints. 70% GET, 30% HEAD. Маскирует паттерн реального трафика.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 11. RECONNECT ==================== -->
+<section id="reconnect">
+  <h2><span class="num">11</span> Reconnection & Connection Pool</h2>
+  <p class="desc">Exponential backoff при обрыве + pre-established connection pool для моментального dial.</p>
+  <div class="diagram-card">
+    <pre class="mermaid">
+flowchart TD
+    subgraph POOL_LOGIC ["Connection Pool"]
+        DIAL_REQ(["Dial request"]) --> TRY_POOL{"Pool has<br/>connection?"}
+        TRY_POOL -->|"Yes"| INSTANT["Return pooled conn<br/>Instant (0ms)"]
+        TRY_POOL -->|"No (empty)"| DIRECT["Dial via inner transport<br/>(ReconnectingTransport)"]
+
+        REFILL_LOOP["Background Refill Loop<br/>Every 10s"] --> CHECK_SIZE{"pool.len<br/>< 2?"}
+        CHECK_SIZE -->|"Yes"| PREFILL["Dial + add to pool<br/>Random sessionID"]
+        CHECK_SIZE -->|"No"| SLEEP_REFILL["Sleep 10s"]
+        PREFILL --> CHECK_SIZE
+        SLEEP_REFILL --> CHECK_SIZE
+    end
+
+    subgraph RECONNECT_LOGIC ["Reconnecting Transport"]
+        DIRECT --> ATTEMPT["inner.Dial(ctx, sessionID)"]
+        ATTEMPT --> SUCCESS{"Success?"}
+        SUCCESS -->|"Yes"| RETURN(["Return connection"])
+        SUCCESS -->|"No"| BACKOFF
+
+        BACKOFF["Exponential Backoff"] --> W1["Attempt 1: wait 1s"]
+        W1 --> W2["Attempt 2: wait 2s"]
+        W2 --> W3["Attempt 3: wait 4s"]
+        W3 --> W4["Attempt 4: wait 8s"]
+        W4 --> W5["Attempt 5: wait 16s"]
+        W5 --> W6["Attempt 6+: wait 30s (max)"]
+        W6 --> CTX{"Context<br/>cancelled?"}
+        CTX -->|"Yes"| GIVE_UP["Return error"]
+        CTX -->|"No"| ATTEMPT
+
+        W1 --> ATTEMPT
+        W2 --> ATTEMPT
+        W3 --> ATTEMPT
+        W4 --> ATTEMPT
+        W5 --> ATTEMPT
+    end
+
+    style POOL_LOGIC fill:#0f172a,stroke:#6366f1,color:#e2e8f0
+    style RECONNECT_LOGIC fill:#0f172a,stroke:#f59e0b,color:#e2e8f0
+    style DIAL_REQ fill:#6366f1,color:white
+    style INSTANT fill:#0a1a15,stroke:#10b981,color:#10b981
+    style RETURN fill:#10b981,color:white
+    style GIVE_UP fill:#2a1020,stroke:#ef4444,color:#ef4444
+    </pre>
+  </div>
+</section>
+
+</div>
+
+<footer>
+  Nightveil Flow Map — auto-generated from source code analysis
+</footer>
+
+<script>
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'dark',
+  themeVariables: {
+    darkMode: true,
+    background: '#111827',
+    primaryColor: '#312e81',
+    primaryTextColor: '#e2e8f0',
+    primaryBorderColor: '#6366f1',
+    secondaryColor: '#1e1b4b',
+    tertiaryColor: '#0f172a',
+    lineColor: '#475569',
+    textColor: '#e2e8f0',
+    mainBkg: '#1e1b4b',
+    nodeBorder: '#6366f1',
+    clusterBkg: '#111827',
+    clusterBorder: '#334155',
+    titleColor: '#e2e8f0',
+    edgeLabelBackground: '#111827',
+    nodeTextColor: '#e2e8f0',
+    actorTextColor: '#e2e8f0',
+    labelTextColor: '#e2e8f0',
+    loopTextColor: '#e2e8f0',
+    noteBkgColor: '#1e1b4b',
+    noteTextColor: '#e2e8f0',
+    noteBorderColor: '#6366f1'
+  },
+  flowchart: {
+    curve: 'basis',
+    padding: 20,
+    htmlLabels: true,
+    useMaxWidth: true
+  },
+  stateDiagram: {
+    htmlLabels: true,
+    useMaxWidth: true
+  }
+});
+
+// Sticky nav active state
+const sections = document.querySelectorAll('section');
+const navLinks = document.querySelectorAll('nav a');
+
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      navLinks.forEach(link => link.classList.remove('active'));
+      const active = document.querySelector(`nav a[href="#${entry.target.id}"]`);
+      if (active) active.classList.add('active');
+    }
+  });
+}, { rootMargin: '-80px 0px -60% 0px' });
+
+sections.forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>

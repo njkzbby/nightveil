@@ -2,6 +2,7 @@ package padding
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
 	"net"
 	"sync"
@@ -146,12 +147,10 @@ func TestPaddingZeroPadding(t *testing.T) {
 }
 
 func TestPaddingWireSize(t *testing.T) {
-	// Verify that the wire format is larger than the original data
 	left, right := net.Pipe()
 	defer right.Close()
 
-	mw := New(Config{MinBytes: 10, MaxBytes: 10}) // exactly 10 bytes padding
-
+	mw := New(Config{MinBytes: 10, MaxBytes: 10})
 	writerConn := mw.Wrap(&pipeConn{left})
 
 	msg := []byte("test")
@@ -160,12 +159,104 @@ func TestPaddingWireSize(t *testing.T) {
 		left.Close()
 	}()
 
-	// Read raw bytes from the wire
 	raw, _ := io.ReadAll(right)
-
-	// Expected: 4 (header) + 4 (data) + 10 (padding) = 18 bytes
 	expected := headerSize + len(msg) + 10
 	if len(raw) != expected {
 		t.Fatalf("wire size: got %d, want %d", len(raw), expected)
+	}
+}
+
+func TestPaddingHugeWrite(t *testing.T) {
+	// Test data > 65535 bytes — triggers multi-frame split
+	left, right := net.Pipe()
+
+	mw := New(Config{MinBytes: 0, MaxBytes: 0})
+	writerConn := mw.Wrap(&pipeConn{left})
+	readerConn := mw.Wrap(&pipeConn{right})
+
+	size := 100000
+	data := make([]byte, size)
+	for i := range data {
+		data[i] = byte(i % 199)
+	}
+
+	received := make(chan []byte, 1)
+	go func() {
+		var buf []byte
+		tmp := make([]byte, 8192)
+		for len(buf) < size {
+			n, err := readerConn.Read(tmp)
+			if err != nil {
+				break
+			}
+			buf = append(buf, tmp[:n]...)
+		}
+		received <- buf
+	}()
+
+	writerConn.Write(data)
+	writerConn.Close()
+
+	got := <-received
+	if len(got) < size {
+		t.Fatalf("received %d, want %d", len(got), size)
+	}
+	for i := 0; i < size; i++ {
+		if got[i] != data[i] {
+			t.Fatalf("mismatch at byte %d", i)
+			break
+		}
+	}
+}
+
+func TestPaddingRangeStatistical(t *testing.T) {
+	// Verify padding is within configured range over many writes
+	left, right := net.Pipe()
+	defer right.Close()
+
+	mw := New(Config{MinBytes: 20, MaxBytes: 100})
+	writerConn := mw.Wrap(&pipeConn{left})
+
+	go func() {
+		for i := 0; i < 50; i++ {
+			writerConn.Write([]byte("x"))
+		}
+		left.Close()
+	}()
+
+	for i := 0; i < 50; i++ {
+		var header [4]byte
+		if _, err := io.ReadFull(right, header[:]); err != nil {
+			break
+		}
+		realLen := int(binary.LittleEndian.Uint16(header[0:2]))
+		padLen := int(binary.LittleEndian.Uint16(header[2:4]))
+
+		if realLen != 1 {
+			t.Fatalf("frame %d: realLen=%d, want 1", i, realLen)
+		}
+		if padLen < 20 || padLen > 100 {
+			t.Fatalf("frame %d: padLen=%d out of range [20,100]", i, padLen)
+		}
+
+		// Drain the data + padding
+		discard := make([]byte, realLen+padLen)
+		io.ReadFull(right, discard)
+	}
+}
+
+func TestPaddingClosePropagates(t *testing.T) {
+	left, right := net.Pipe()
+
+	mw := New(Config{MinBytes: 0, MaxBytes: 0})
+	writerConn := mw.Wrap(&pipeConn{left})
+	readerConn := mw.Wrap(&pipeConn{right})
+
+	writerConn.Close()
+
+	buf := make([]byte, 10)
+	_, err := readerConn.Read(buf)
+	if err == nil {
+		t.Fatal("expected error after close")
 	}
 }

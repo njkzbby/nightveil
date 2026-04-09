@@ -3,9 +3,9 @@ package xhttp
 import (
 	"context"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -24,6 +24,8 @@ type Server struct {
 
 	// Track which sessions have been sent to acceptCh
 	accepted   map[[16]byte]bool
+	hasUpload  map[[16]byte]bool
+	hasDownload map[[16]byte]bool
 	acceptedMu sync.Mutex
 }
 
@@ -35,8 +37,10 @@ func NewServer(cfg Config, authenticator auth.ServerAuth, fallback http.Handler)
 		auth:     authenticator,
 		sessions: session.NewManager(time.Duration(cfg.SessionTimeout) * time.Second),
 		fallback: fallback,
-		acceptCh: make(chan transport.Conn, 64),
-		accepted: make(map[[16]byte]bool),
+		acceptCh:    make(chan transport.Conn, 64),
+		accepted:    make(map[[16]byte]bool),
+		hasUpload:   make(map[[16]byte]bool),
+		hasDownload: make(map[[16]byte]bool),
 	}
 }
 
@@ -60,30 +64,26 @@ func (s *Server) Close() error {
 }
 
 // ServeHTTP routes incoming HTTP requests.
+// Server doesn't know per-client paths — it authenticates first,
+// then routes by HTTP method: POST=upload, GET=download.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	path := r.URL.Path
-
-	// Match paths: any prefix + our upload/download suffixes
-	isUpload := strings.HasSuffix(path, s.config.UploadPath)
-	isDownload := strings.HasSuffix(path, s.config.DownloadPath)
-
-	if !isUpload && !isDownload {
-		s.fallback.ServeHTTP(w, r)
-		return
-	}
-
-	// Authenticate
+	// Try to authenticate first — if auth fails, serve fallback
 	sessionID, err := s.auth.Validate(r.Context(), r)
 	if err != nil {
+		// Not authenticated → serve real website (anti-probing)
 		s.fallback.ServeHTTP(w, r)
 		return
 	}
 
-	if isUpload && r.Method == http.MethodPost {
+	log.Printf("[xhttp] auth OK: %s %s session=%x", r.Method, r.URL.Path, sessionID[:4])
+
+	// Authenticated — route by method
+	switch r.Method {
+	case http.MethodPost:
 		s.handleUpload(w, r, sessionID)
-	} else if isDownload && r.Method == http.MethodGet {
+	case http.MethodGet:
 		s.handleDownload(w, r, sessionID)
-	} else {
+	default:
 		s.fallback.ServeHTTP(w, r)
 	}
 }
@@ -105,7 +105,10 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request, sessionID 
 	sess := s.sessions.GetOrCreate(sessionID)
 	sess.PushUpload(seq, body)
 
-	// Try to emit this session as a new connection
+	s.acceptedMu.Lock()
+	s.hasUpload[sessionID] = true
+	s.acceptedMu.Unlock()
+
 	s.tryEmit(sess, sessionID, r.RemoteAddr)
 
 	w.WriteHeader(http.StatusOK)
@@ -114,33 +117,59 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request, sessionID 
 func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request, sessionID [16]byte) {
 	sess := s.sessions.GetOrCreate(sessionID)
 
-	// Mark download channel present
+	s.acceptedMu.Lock()
+	s.hasDownload[sessionID] = true
+	s.acceptedMu.Unlock()
+
+	// Mark connected and try to emit
 	sess.MarkConnected()
 	s.tryEmit(sess, sessionID, r.RemoteAddr)
 
-	// Stream — flush headers immediately so client's http.Client.Do() returns
+	// Stream — flush headers so client unblocks
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 
 	flusher, canFlush := w.(http.Flusher)
 	if canFlush {
-		flusher.Flush() // Critical: send headers now so client unblocks
+		flusher.Flush()
 	}
+
+	// Client sends offset of bytes already received (&off=N).
+	// On reconnect, resume from that offset — zero data loss, zero duplicates.
+	offset := 0
+	if offStr := r.URL.Query().Get("off"); offStr != "" {
+		if v, err := strconv.Atoi(offStr); err == nil && v > 0 {
+			offset = v
+		}
+	}
+
 	buf := make([]byte, 32768)
 
 	for {
-		n, err := sess.DownloadReader.Read(buf)
+		// Try to read available data
+		n, newOffset, err := sess.DownloadBuf.ReadFrom(offset, buf)
 		if n > 0 {
 			if _, werr := w.Write(buf[:n]); werr != nil {
-				break
+				return // GET broke — data safe in buffer, next GET resumes
 			}
 			if canFlush {
 				flusher.Flush()
 			}
+			offset = newOffset
+			continue // check for more data immediately
 		}
 		if err != nil {
-			break
+			return // session closed
+		}
+
+		// No data yet — wait for notification or context cancel
+		select {
+		case <-sess.DownloadBuf.Notify():
+			// New data available — loop back to ReadFrom
+		case <-r.Context().Done():
+			return // HTTP request cancelled
 		}
 	}
 }
@@ -153,13 +182,9 @@ func (s *Server) tryEmit(sess *session.Session, id [16]byte, remoteAddr string) 
 		return
 	}
 
-	// Only emit once both upload and download are registered.
-	// We mark connected on download, and upload always has data.
-	// Check if connected (non-blocking).
-	select {
-	case <-sess.Connected():
-		// Ready
-	default:
+	// Download GET is sufficient to emit — upload POST will feed data later.
+	// Previously required both, causing streaming (SSE) to stall until first POST.
+	if !s.hasDownload[id] {
 		s.acceptedMu.Unlock()
 		return
 	}

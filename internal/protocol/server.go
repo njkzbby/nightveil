@@ -20,19 +20,18 @@ func (s *Server) HandleConnection(ctx context.Context, conn transport.Conn) (*Re
 		return nil, fmt.Errorf("read request: %w", err)
 	}
 
-	if f.Type != CmdConnect {
-		return nil, fmt.Errorf("expected CONNECT, got type 0x%02x", f.Type)
+	if f.Type != CmdConnect && f.Type != CmdUDP {
+		return nil, fmt.Errorf("expected CONNECT or UDP, got type 0x%02x", f.Type)
 	}
 
 	host, port, err := DecodeConnectPayload(f.Payload)
 	if err != nil {
-		// Send refused ACK
 		WriteFrame(conn, &Frame{Type: CmdACK, Payload: []byte{byte(StatusRefused)}})
-		return nil, fmt.Errorf("decode connect: %w", err)
+		return nil, fmt.Errorf("decode payload: %w", err)
 	}
 
 	return &Request{
-		Command: CmdConnect,
+		Command: Command(f.Type),
 		Host:    host,
 		Port:    port,
 	}, nil

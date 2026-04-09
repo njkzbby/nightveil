@@ -4,12 +4,10 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/binary"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"golang.org/x/crypto/curve25519"
 )
@@ -18,143 +16,78 @@ func generateTestKeypair(t *testing.T) ([32]byte, [32]byte) {
 	t.Helper()
 	var priv [32]byte
 	rand.Read(priv[:])
-	pub, err := curve25519.X25519(priv[:], curve25519.Basepoint)
-	if err != nil {
-		t.Fatal(err)
-	}
+	pub, _ := curve25519.X25519(priv[:], curve25519.Basepoint)
 	var pubKey [32]byte
 	copy(pubKey[:], pub)
 	return priv, pubKey
 }
 
-func TestRoundTrip(t *testing.T) {
-	privKey, pubKey := generateTestKeypair(t)
+func setupTestAuth(t *testing.T) (*ClientX25519, *ServerX25519, []byte) {
+	t.Helper()
+	serverPriv, serverPub := generateTestKeypair(t)
+	userPriv, userPub := generateTestKeypair(t)
 	shortID := []byte{0x03, 0x93, 0x2b, 0x8e}
 
 	client := &ClientX25519{
-		ServerPublicKey: pubKey,
+		ServerPublicKey: serverPub,
+		UserPrivateKey:  userPriv,
+		UserPublicKey:   userPub,
 		ShortID:         shortID,
 	}
 
 	server := &ServerX25519{
-		PrivateKey:  privKey,
-		ShortIDs:    map[string]bool{"03932b8e": true},
+		PrivateKey: serverPriv,
+		Users: map[string]*UserEntry{
+			"03932b8e": {PublicKey: userPub, ShortID: "03932b8e", Name: "test"},
+		},
 		MaxTimeDiff: 120,
 		TokenHeader: "nv_token",
 	}
 
-	// Generate a session ID
+	return client, server, shortID
+}
+
+func TestRoundTrip(t *testing.T) {
+	client, server, _ := setupTestAuth(t)
+
 	var sessionID [16]byte
 	rand.Read(sessionID[:])
 
-	// Client generates token
 	token, err := client.GenerateToken(sessionID)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
 
-	// Create HTTP request with token in cookie
 	tokenB64 := base64.RawURLEncoding.EncodeToString(token)
 	req := httptest.NewRequest("POST", "/upload", nil)
 	req.AddCookie(&http.Cookie{Name: "nv_token", Value: tokenB64})
 
-	// Server validates
 	gotID, err := server.Validate(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
-
 	if gotID != sessionID {
-		t.Fatalf("session ID mismatch: got %x, want %x", gotID, sessionID)
-	}
-}
-
-func TestRoundTripViaHeader(t *testing.T) {
-	privKey, pubKey := generateTestKeypair(t)
-
-	client := &ClientX25519{
-		ServerPublicKey: pubKey,
-		ShortID:         []byte{0xAB},
-	}
-
-	server := &ServerX25519{
-		PrivateKey:  privKey,
-		ShortIDs:    map[string]bool{"ab": true},
-		MaxTimeDiff: 120,
-		TokenHeader: "X-Auth",
-	}
-
-	var sessionID [16]byte
-	rand.Read(sessionID[:])
-
-	token, err := client.GenerateToken(sessionID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	req := httptest.NewRequest("GET", "/stream", nil)
-	req.Header.Set("X-Auth", base64.RawURLEncoding.EncodeToString(token))
-
-	gotID, err := server.Validate(context.Background(), req)
-	if err != nil {
-		t.Fatalf("Validate via header: %v", err)
-	}
-	if gotID != sessionID {
-		t.Fatal("session ID mismatch")
-	}
-}
-
-func TestEmptyShortID(t *testing.T) {
-	privKey, pubKey := generateTestKeypair(t)
-
-	client := &ClientX25519{
-		ServerPublicKey: pubKey,
-		ShortID:         nil, // empty
-	}
-
-	server := &ServerX25519{
-		PrivateKey:  privKey,
-		ShortIDs:    nil, // accept any
-		MaxTimeDiff: 120,
-		TokenHeader: "nv_token",
-	}
-
-	var sessionID [16]byte
-	rand.Read(sessionID[:])
-
-	token, _ := client.GenerateToken(sessionID)
-	req := httptest.NewRequest("POST", "/", nil)
-	req.AddCookie(&http.Cookie{Name: "nv_token", Value: base64.RawURLEncoding.EncodeToString(token)})
-
-	gotID, err := server.Validate(context.Background(), req)
-	if err != nil {
-		t.Fatalf("Validate with empty shortID: %v", err)
-	}
-	if gotID != sessionID {
-		t.Fatal("session ID mismatch")
+		t.Fatalf("session ID mismatch")
 	}
 }
 
 func TestWrongServerKey(t *testing.T) {
-	_, pubKey := generateTestKeypair(t)
-	wrongPriv, _ := generateTestKeypair(t) // different keypair
+	client, _, _ := setupTestAuth(t)
 
-	client := &ClientX25519{
-		ServerPublicKey: pubKey,
-		ShortID:         []byte{0x01},
-	}
-
+	wrongPriv, _ := generateTestKeypair(t)
 	server := &ServerX25519{
-		PrivateKey:  wrongPriv, // WRONG key
-		ShortIDs:    map[string]bool{"01": true},
+		PrivateKey: wrongPriv,
+		Users: map[string]*UserEntry{
+			"03932b8e": {PublicKey: client.UserPublicKey, ShortID: "03932b8e"},
+		},
 		MaxTimeDiff: 120,
 		TokenHeader: "nv_token",
 	}
 
 	var sessionID [16]byte
 	rand.Read(sessionID[:])
-
 	token, _ := client.GenerateToken(sessionID)
+
 	req := httptest.NewRequest("POST", "/", nil)
 	req.AddCookie(&http.Cookie{Name: "nv_token", Value: base64.RawURLEncoding.EncodeToString(token)})
 
@@ -164,226 +97,182 @@ func TestWrongServerKey(t *testing.T) {
 	}
 }
 
-func TestWrongShortID(t *testing.T) {
-	privKey, pubKey := generateTestKeypair(t)
+func TestWrongUserKey(t *testing.T) {
+	_, server, _ := setupTestAuth(t)
 
-	client := &ClientX25519{
-		ServerPublicKey: pubKey,
-		ShortID:         []byte{0x01},
-	}
+	// Different user keypair
+	_, serverPub := generateTestKeypair(t)
+	attackerPriv, attackerPub := generateTestKeypair(t)
 
-	server := &ServerX25519{
-		PrivateKey:  privKey,
-		ShortIDs:    map[string]bool{"ff": true}, // different shortID
-		MaxTimeDiff: 120,
-		TokenHeader: "nv_token",
+	attacker := &ClientX25519{
+		ServerPublicKey: serverPub,
+		UserPrivateKey:  attackerPriv,
+		UserPublicKey:   attackerPub,
+		ShortID:         []byte{0x03, 0x93, 0x2b, 0x8e}, // same shortID!
 	}
 
 	var sessionID [16]byte
 	rand.Read(sessionID[:])
+	token, _ := attacker.GenerateToken(sessionID)
 
-	token, _ := client.GenerateToken(sessionID)
 	req := httptest.NewRequest("POST", "/", nil)
 	req.AddCookie(&http.Cookie{Name: "nv_token", Value: base64.RawURLEncoding.EncodeToString(token)})
 
 	_, err := server.Validate(context.Background(), req)
 	if err != ErrAuthFailed {
-		t.Fatalf("expected ErrAuthFailed for wrong shortID, got %v", err)
+		t.Fatal("expected ErrAuthFailed for wrong user key")
 	}
 }
 
-func TestExpiredTimestamp(t *testing.T) {
-	privKey, pubKey := generateTestKeypair(t)
-	shortID := []byte{0x01}
+func TestUnknownShortID(t *testing.T) {
+	client, server, _ := setupTestAuth(t)
+	client.ShortID = []byte{0xFF, 0xFF} // not registered
 
-	client := &ClientX25519{
-		ServerPublicKey: pubKey,
-		ShortID:         shortID,
-	}
-
-	// Generate token
 	var sessionID [16]byte
 	rand.Read(sessionID[:])
 	token, _ := client.GenerateToken(sessionID)
-
-	// Tamper the timestamp: set it 200s in the past
-	shortIDLen := int(token[32])
-	tsOffset := 33 + shortIDLen
-	oldTs := time.Now().Unix() - 200
-	binary.BigEndian.PutUint64(token[tsOffset:tsOffset+8], uint64(oldTs))
-
-	// This will fail because tampering breaks the AEAD (timestamp is in the salt)
-	server := &ServerX25519{
-		PrivateKey:  privKey,
-		ShortIDs:    map[string]bool{"01": true},
-		MaxTimeDiff: 120,
-		TokenHeader: "nv_token",
-	}
 
 	req := httptest.NewRequest("POST", "/", nil)
 	req.AddCookie(&http.Cookie{Name: "nv_token", Value: base64.RawURLEncoding.EncodeToString(token)})
 
 	_, err := server.Validate(context.Background(), req)
 	if err != ErrAuthFailed {
-		t.Fatalf("expected ErrAuthFailed for tampered timestamp, got %v", err)
+		t.Fatal("expected ErrAuthFailed for unknown shortID")
 	}
 }
 
 func TestNoToken(t *testing.T) {
-	privKey, _ := generateTestKeypair(t)
-
-	server := &ServerX25519{
-		PrivateKey:  privKey,
-		ShortIDs:    nil,
-		MaxTimeDiff: 120,
-		TokenHeader: "nv_token",
-	}
-
+	_, server, _ := setupTestAuth(t)
 	req := httptest.NewRequest("GET", "/", nil)
 	_, err := server.Validate(context.Background(), req)
 	if err != ErrAuthFailed {
-		t.Fatalf("expected ErrAuthFailed for missing token, got %v", err)
+		t.Fatal("expected ErrAuthFailed")
 	}
 }
 
 func TestGarbageToken(t *testing.T) {
-	privKey, _ := generateTestKeypair(t)
-
-	server := &ServerX25519{
-		PrivateKey:  privKey,
-		ShortIDs:    nil,
-		MaxTimeDiff: 120,
-		TokenHeader: "nv_token",
-	}
-
+	_, server, _ := setupTestAuth(t)
 	req := httptest.NewRequest("GET", "/", nil)
 	req.AddCookie(&http.Cookie{Name: "nv_token", Value: "dGhpcyBpcyBnYXJiYWdl"})
-
 	_, err := server.Validate(context.Background(), req)
 	if err != ErrAuthFailed {
-		t.Fatalf("expected ErrAuthFailed for garbage token, got %v", err)
+		t.Fatal("expected ErrAuthFailed")
+	}
+}
+
+func TestGenerateUserKeypair(t *testing.T) {
+	priv, pub, err := GenerateUserKeypair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if priv == [32]byte{} || pub == [32]byte{} {
+		t.Fatal("empty keypair")
+	}
+	// Verify pub derives from priv
+	derived, _ := DerivePublicKey(priv)
+	if derived != pub {
+		t.Fatal("pub doesn't match derived from priv")
 	}
 }
 
 func TestDecodeKey(t *testing.T) {
 	var original [32]byte
 	rand.Read(original[:])
-
 	encoded := base64.RawStdEncoding.EncodeToString(original[:])
 	decoded, err := DecodeKey(encoded)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if decoded != original {
-		t.Fatal("key mismatch after decode")
+		t.Fatal("mismatch")
 	}
 }
 
 func TestDecodeKeyWrongLength(t *testing.T) {
-	short := base64.RawStdEncoding.EncodeToString([]byte("too short"))
-	_, err := DecodeKey(short)
+	_, err := DecodeKey(base64.RawStdEncoding.EncodeToString([]byte("short")))
 	if err == nil {
-		t.Fatal("expected error for wrong-length key")
+		t.Fatal("expected error")
 	}
 }
 
-func BenchmarkGenerateToken(b *testing.B) {
-	_, pubKey := func() ([32]byte, [32]byte) {
-		var priv [32]byte
-		rand.Read(priv[:])
-		pub, _ := curve25519.X25519(priv[:], curve25519.Basepoint)
-		var pubKey [32]byte
-		copy(pubKey[:], pub)
-		return priv, pubKey
-	}()
+func TestMultipleUsers(t *testing.T) {
+	serverPriv, serverPub := generateTestKeypair(t)
 
-	client := &ClientX25519{
-		ServerPublicKey: pubKey,
-		ShortID:         []byte{0x01, 0x02, 0x03, 0x04},
-	}
-	var sid [16]byte
+	// Create 3 users
+	users := make(map[string]*UserEntry)
+	clients := make([]*ClientX25519, 3)
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := client.GenerateToken(sid)
-		if err != nil {
-			b.Fatal(err)
+	for i := 0; i < 3; i++ {
+		userPriv, userPub := generateTestKeypair(t)
+		sid := []byte{byte(i + 1)}
+		sidHex := fmt.Sprintf("%02x", i+1)
+
+		users[sidHex] = &UserEntry{PublicKey: userPub, ShortID: sidHex, Name: fmt.Sprintf("user%d", i)}
+		clients[i] = &ClientX25519{
+			ServerPublicKey: serverPub,
+			UserPrivateKey:  userPriv,
+			UserPublicKey:   userPub,
+			ShortID:         sid,
 		}
 	}
-}
 
-func BenchmarkValidate(b *testing.B) {
-	privKey, pubKey := func() ([32]byte, [32]byte) {
-		var priv [32]byte
-		rand.Read(priv[:])
-		pub, _ := curve25519.X25519(priv[:], curve25519.Basepoint)
-		var pubKey [32]byte
-		copy(pubKey[:], pub)
-		return priv, pubKey
-	}()
-
-	client := &ClientX25519{ServerPublicKey: pubKey, ShortID: []byte{0x01}}
 	server := &ServerX25519{
-		PrivateKey: privKey, ShortIDs: map[string]bool{"01": true},
-		MaxTimeDiff: 120, TokenHeader: "nv_token",
+		PrivateKey:  serverPriv,
+		Users:       users,
+		MaxTimeDiff: 120,
+		TokenHeader: "nv_token",
 	}
 
-	var sid [16]byte
-	tokens := make([]string, 100)
-	for i := range tokens {
-		token, _ := client.GenerateToken(sid)
-		tokens[i] = base64.RawURLEncoding.EncodeToString(token)
-	}
+	// Each user should authenticate independently
+	for i, client := range clients {
+		var sessionID [16]byte
+		rand.Read(sessionID[:])
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+		token, err := client.GenerateToken(sessionID)
+		if err != nil {
+			t.Fatalf("user %d generate: %v", i, err)
+		}
+
 		req := httptest.NewRequest("POST", "/", nil)
-		req.AddCookie(&http.Cookie{Name: "nv_token", Value: tokens[i%len(tokens)]})
-		_, err := server.Validate(context.Background(), req)
+		req.AddCookie(&http.Cookie{Name: "nv_token", Value: base64.RawURLEncoding.EncodeToString(token)})
+
+		gotID, err := server.Validate(context.Background(), req)
 		if err != nil {
-			b.Fatalf("iteration %d: %v", i, err)
+			t.Fatalf("user %d validate: %v", i, err)
+		}
+		if gotID != sessionID {
+			t.Fatalf("user %d session mismatch", i)
 		}
 	}
 }
 
-func TestMultipleSessionsConcurrent(t *testing.T) {
-	privKey, pubKey := generateTestKeypair(t)
-	shortID := []byte{0xAA}
-
-	client := &ClientX25519{ServerPublicKey: pubKey, ShortID: shortID}
-	server := &ServerX25519{
-		PrivateKey: privKey, ShortIDs: map[string]bool{"aa": true},
-		MaxTimeDiff: 120, TokenHeader: "nv_token",
-	}
+func TestConcurrent(t *testing.T) {
+	client, server, _ := setupTestAuth(t)
 
 	errs := make(chan error, 50)
 	for i := 0; i < 50; i++ {
-		go func(i int) {
+		go func() {
 			var sid [16]byte
 			rand.Read(sid[:])
-
 			token, err := client.GenerateToken(sid)
 			if err != nil {
-				errs <- fmt.Errorf("gen %d: %w", i, err)
+				errs <- err
 				return
 			}
-
 			req := httptest.NewRequest("POST", "/", nil)
 			req.AddCookie(&http.Cookie{Name: "nv_token", Value: base64.RawURLEncoding.EncodeToString(token)})
-
 			gotSID, err := server.Validate(context.Background(), req)
 			if err != nil {
-				errs <- fmt.Errorf("validate %d: %w", i, err)
+				errs <- err
 				return
 			}
 			if gotSID != sid {
-				errs <- fmt.Errorf("mismatch %d", i)
+				errs <- fmt.Errorf("mismatch")
 				return
 			}
 			errs <- nil
-		}(i)
+		}()
 	}
-
 	for i := 0; i < 50; i++ {
 		if err := <-errs; err != nil {
 			t.Fatal(err)

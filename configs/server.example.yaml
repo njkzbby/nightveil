@@ -4,19 +4,25 @@ server:
   tls:
     cert_file: "/etc/nightveil/cert.pem"
     key_file: "/etc/nightveil/key.pem"
+    # REALITY mode (future):
+    # dest: "google.com:443"
 
   auth:
     private_key: "REPLACE_WITH_BASE64_PRIVATE_KEY"
-    short_ids:
-      - "REPLACE_WITH_SHORT_ID"
     max_time_diff: 120
+    # Per-user keys (recommended):
+    users:
+      - short_id: "REPLACE"
+        public_key: "REPLACE_WITH_USER_PUBLIC_KEY"
+        name: "User 1"
+    # Legacy (shortID-only, no per-user keys):
+    # short_ids:
+    #   - "abcdef01"
 
   transport:
     type: "xhttp"
-    # Server accepts any path prefix — each client has unique paths
     max_chunk_size: 14336
     session_timeout: 30
-    max_parallel_uploads: 4
 
   middleware:
     - type: "padding"
@@ -24,5 +30,10 @@ server:
       max_bytes: 256
 
   fallback:
-    mode: "reverse_proxy"
-    upstream: "http://127.0.0.1:8080"
+    mode: "default"
+
+  # Management API (optional):
+  # api:
+  #   enabled: true
+  #   listen: "127.0.0.1:9090"
+  #   secret: "your-secret"

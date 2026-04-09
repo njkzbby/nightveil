@@ -7,3 +7,19 @@
 *.out
 .idea/
 .vscode/
+
+# Build artifacts
+nv-linux
+build/v2rayN/
+build/v2rayN-output/
+build/sing-box/
+
+# Deploy — NEVER commit real keys, certs, or configs with credentials
+deploy/*.pem
+deploy/*.key
+deploy/server.yaml
+deploy/client.yaml
+deploy/v2rayn/
+
+# Test configs with real credentials
+configs/test-*.yaml

@@ -1,0 +1,192 @@
+package main
+
+import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/pem"
+	"flag"
+	"fmt"
+	"math/big"
+	"net"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/nightveil/nv/internal/config"
+	"golang.org/x/crypto/curve25519"
+)
+
+// runInit auto-generates everything needed to run a server.
+// Designed to run inside Docker on first start.
+func runInit() {
+	fs := flag.NewFlagSet("init", flag.ExitOnError)
+	port := fs.Int("port", 443, "listen port")
+	name := fs.String("name", "Nightveil", "server display name")
+	configDir := fs.String("dir", "/etc/nightveil", "config directory")
+	fs.Parse(os.Args[1:])
+
+	configPath := *configDir + "/server.yaml"
+	certPath := *configDir + "/cert.pem"
+	keyPath := *configDir + "/key.pem"
+	linkPath := *configDir + "/import.txt"
+
+	// Skip if already initialized
+	if _, err := os.Stat(configPath); err == nil {
+		fmt.Println("Already initialized. Config exists at", configPath)
+		showImportLink(linkPath)
+		return
+	}
+
+	os.MkdirAll(*configDir, 0700)
+
+	// Detect public IP
+	serverIP := detectIP()
+	fmt.Printf("  Server IP: %s\n", serverIP)
+
+	// Generate X25519 keypair
+	privKey := make([]byte, 32)
+	rand.Read(privKey)
+	pubKey, _ := curve25519.X25519(privKey, curve25519.Basepoint)
+	privB64 := base64.RawStdEncoding.EncodeToString(privKey)
+	pubB64 := base64.RawStdEncoding.EncodeToString(pubKey)
+
+	// Generate shortID
+	sidBytes := make([]byte, 4)
+	rand.Read(sidBytes)
+	shortID := hex.EncodeToString(sidBytes)
+
+	// Generate per-client params
+	pathPrefix := "/" + randAlpha(6)
+	uploadPath := "/u/" + randAlpha(3)
+	downloadPath := "/d/" + randAlpha(3)
+	sessionKey := randAlpha(5)
+
+	// Generate self-signed TLS cert
+	generateCert(certPath, keyPath, serverIP)
+
+	// Write server config
+	yaml := fmt.Sprintf(`server:
+  listen: "0.0.0.0:%d"
+  tls:
+    cert_file: "%s"
+    key_file: "%s"
+  auth:
+    private_key: "%s"
+    short_ids:
+      - "%s"
+    max_time_diff: 120
+  transport:
+    type: "xhttp"
+    max_chunk_size: 14336
+    session_timeout: 30
+    max_parallel_uploads: 4
+  middleware:
+    - type: "padding"
+      min_bytes: 64
+      max_bytes: 256
+  fallback:
+    mode: "default"
+`, *port, certPath, keyPath, privB64, shortID)
+
+	os.WriteFile(configPath, []byte(yaml), 0600)
+
+	// Generate import link
+	importLink := config.GenerateURI(
+		pubB64, serverIP, *port, shortID,
+		pathPrefix, uploadPath, downloadPath,
+		sessionKey, 14336, "chrome", *name,
+	)
+
+	// Add skip=1 for self-signed cert
+	importLink += "&skip=1"
+
+	// Save import link
+	os.WriteFile(linkPath, []byte(importLink+"\n"), 0644)
+
+	fmt.Println("")
+	fmt.Println("  ========================================")
+	fmt.Println("  Nightveil server initialized!")
+	fmt.Println("  ========================================")
+	fmt.Println("")
+	fmt.Printf("  Port: %d\n", *port)
+	fmt.Printf("  Users: 1\n")
+	fmt.Println("")
+	fmt.Println("  Import link (send to users):")
+	fmt.Println(" ", importLink)
+	fmt.Println("")
+	fmt.Printf("  Public key (for adding users): %s\n", pubB64)
+	fmt.Println("")
+}
+
+func showImportLink(path string) {
+	data, err := os.ReadFile(path)
+	if err == nil && len(data) > 0 {
+		fmt.Println("")
+		fmt.Println("  Import link:")
+		fmt.Println(" ", strings.TrimSpace(string(data)))
+		fmt.Println("")
+	}
+}
+
+func detectIP() string {
+	// Try to detect from network interfaces
+	addrs, _ := net.InterfaceAddrs()
+	for _, a := range addrs {
+		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() && ipnet.IP.To4() != nil {
+			ip := ipnet.IP.String()
+			if !strings.HasPrefix(ip, "10.") && !strings.HasPrefix(ip, "172.") && !strings.HasPrefix(ip, "192.168.") {
+				return ip
+			}
+		}
+	}
+	// Fallback
+	conn, err := net.Dial("udp", "8.8.8.8:53")
+	if err == nil {
+		defer conn.Close()
+		return conn.LocalAddr().(*net.UDPAddr).IP.String()
+	}
+	return "0.0.0.0"
+}
+
+func generateCert(certPath, keyPath, ip string) {
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{Organization: []string{"Nightveil"}},
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().Add(10 * 365 * 24 * time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:     []string{"nightveil.local"},
+	}
+	if parsedIP := net.ParseIP(ip); parsedIP != nil {
+		template.IPAddresses = []net.IP{parsedIP}
+	}
+
+	certDER, _ := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+
+	certFile, _ := os.Create(certPath)
+	pem.Encode(certFile, &pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	certFile.Close()
+
+	keyDER, _ := x509.MarshalECPrivateKey(key)
+	keyFile, _ := os.Create(keyPath)
+	pem.Encode(keyFile, &pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+	keyFile.Close()
+}
+
+func randAlpha(n int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, n)
+	for i := range b {
+		idx, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		b[i] = charset[idx.Int64()]
+	}
+	return string(b)
+}

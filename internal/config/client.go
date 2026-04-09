@@ -27,11 +27,14 @@ type ServerConnConfig struct {
 
 type ClientAuthConfig struct {
 	ServerPublicKey string `yaml:"server_public_key"`
+	UserPrivateKey  string `yaml:"user_private_key,omitempty"` // per-user key
 	ShortID         string `yaml:"short_id"`
 }
 
 type ClientTLSConfig struct {
 	Fingerprint string `yaml:"fingerprint"`
+	SNI         string `yaml:"sni"`          // custom SNI (reality-mode: "google.com")
+	SkipVerify  bool   `yaml:"skip_verify"`  // true for self-signed / reality
 }
 
 type AntiThrottleConfig struct {

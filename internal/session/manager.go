@@ -18,9 +18,8 @@ type Session struct {
 	uploadCond *sync.Cond
 	uploadDone bool
 
-	// Download: pipe from server handler to GET response
-	DownloadWriter *PipeWriter
-	DownloadReader *PipeReader
+	// Download: buffered — survives GET stream reconnects without data loss
+	DownloadBuf *DownloadBuffer
 
 	// Signals
 	connected chan struct{} // closed when both upload+download registered
@@ -31,15 +30,13 @@ type Session struct {
 
 // NewSession creates a new session.
 func NewSession(id [16]byte) *Session {
-	pr, pw := newPipe()
 	s := &Session{
-		ID:             id,
-		CreatedAt:      time.Now(),
-		uploadBuf:      make(map[int64][]byte),
-		connected:      make(chan struct{}),
-		closed:         make(chan struct{}),
-		DownloadWriter: pw,
-		DownloadReader: pr,
+		ID:          id,
+		CreatedAt:   time.Now(),
+		uploadBuf:   make(map[int64][]byte),
+		connected:   make(chan struct{}),
+		closed:      make(chan struct{}),
+		DownloadBuf: NewDownloadBuffer(),
 	}
 	s.uploadCond = sync.NewCond(&s.uploadMu)
 	return s
@@ -102,7 +99,7 @@ func (s *Session) Close() {
 		s.uploadDone = true
 		s.uploadCond.Broadcast()
 		s.uploadMu.Unlock()
-		s.DownloadWriter.Close()
+		s.DownloadBuf.Close()
 	})
 }
 
@@ -119,63 +116,6 @@ func (s *Session) IsClosed() bool {
 	default:
 		return false
 	}
-}
-
-// --- Pipe: simple thread-safe byte pipe ---
-
-type PipeReader struct {
-	mu   sync.Mutex
-	cond *sync.Cond
-	buf  []byte
-	done bool
-}
-
-type PipeWriter struct {
-	r *PipeReader
-}
-
-func newPipe() (*PipeReader, *PipeWriter) {
-	r := &PipeReader{}
-	r.cond = sync.NewCond(&r.mu)
-	return r, &PipeWriter{r: r}
-}
-
-func (w *PipeWriter) Write(p []byte) (int, error) {
-	w.r.mu.Lock()
-	defer w.r.mu.Unlock()
-
-	if w.r.done {
-		return 0, ErrSessionClosed
-	}
-
-	cp := make([]byte, len(p))
-	copy(cp, p)
-	w.r.buf = append(w.r.buf, cp...)
-	w.r.cond.Signal()
-	return len(p), nil
-}
-
-func (w *PipeWriter) Close() {
-	w.r.mu.Lock()
-	defer w.r.mu.Unlock()
-	w.r.done = true
-	w.r.cond.Broadcast()
-}
-
-func (r *PipeReader) Read(p []byte) (int, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	for len(r.buf) == 0 {
-		if r.done {
-			return 0, ErrSessionClosed
-		}
-		r.cond.Wait()
-	}
-
-	n := copy(p, r.buf)
-	r.buf = r.buf[n:]
-	return n, nil
 }
 
 // --- Manager ---

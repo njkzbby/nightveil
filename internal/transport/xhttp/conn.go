@@ -34,9 +34,9 @@ func (c *splitConn) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-// Write pushes data to the download pipe (streamed to GET response).
+// Write pushes data to the download buffer (survives GET reconnects).
 func (c *splitConn) Write(p []byte) (int, error) {
-	return c.sess.DownloadWriter.Write(p)
+	return c.sess.DownloadBuf.Write(p)
 }
 
 // Close terminates the session.

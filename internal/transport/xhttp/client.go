@@ -3,14 +3,17 @@ package xhttp
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/nightveil/nv/internal/crypto/auth"
 	"github.com/nightveil/nv/internal/transport"
@@ -81,7 +84,8 @@ type clientConn struct {
 	uploadSeq atomic.Int64
 
 	// Download
-	downloadBody io.ReadCloser
+	downloadBody   io.ReadCloser
+	downloadOffset atomic.Int64 // bytes successfully read from download
 
 	// Close
 	closed    chan struct{}
@@ -89,8 +93,10 @@ type clientConn struct {
 }
 
 func (c *clientConn) startDownload() error {
+	offset := c.downloadOffset.Load()
 	url := c.client.ServerURL + c.client.Config.fullDownloadPath() +
-		"?" + c.client.Config.SessionKeyName + "=" + c.sessionB64
+		"?" + c.client.Config.SessionKeyName + "=" + c.sessionB64 +
+		"&off=" + strconv.FormatInt(offset, 10)
 
 	req, err := http.NewRequestWithContext(c.ctx, "GET", url, nil)
 	if err != nil {
@@ -112,11 +118,38 @@ func (c *clientConn) startDownload() error {
 }
 
 // Read reads from the download stream (GET response body).
+// If the stream closes prematurely, it attempts to reconnect.
 func (c *clientConn) Read(p []byte) (int, error) {
-	if c.downloadBody == nil {
-		return 0, io.EOF
+	for retries := 0; retries < 3; retries++ {
+		if c.downloadBody == nil {
+			if err := c.startDownload(); err != nil {
+				if retries < 2 {
+					// Randomized retry delay to avoid detectable patterns
+					jitter, _ := rand.Int(rand.Reader, big.NewInt(200))
+					delay := 50 + jitter.Int64() + int64(retries)*100
+					time.Sleep(time.Duration(delay) * time.Millisecond)
+					continue
+				}
+				return 0, fmt.Errorf("download reconnect failed: %w", err)
+			}
+		}
+
+		n, err := c.downloadBody.Read(p)
+		if n > 0 {
+			c.downloadOffset.Add(int64(n))
+			return n, nil
+		}
+		if err != nil {
+			// Stream closed — try to reconnect
+			c.downloadBody.Close()
+			c.downloadBody = nil
+			if retries < 2 {
+				continue
+			}
+			return 0, err
+		}
 	}
-	return c.downloadBody.Read(p)
+	return 0, io.EOF
 }
 
 // Write sends data as a POST upload chunk.
@@ -167,11 +200,18 @@ func (c *clientConn) postChunk(data []byte) error {
 }
 
 func (c *clientConn) addAuth(req *http.Request) {
-	// Put token in a separate cookie "nv_token"
 	req.AddCookie(&http.Cookie{
 		Name:  "nv_token",
 		Value: c.tokenB64,
 	})
+	// HTTP-level padding: random header to vary request size
+	padLen := 32
+	diff := 128 - 32
+	n, _ := rand.Int(rand.Reader, big.NewInt(int64(diff+1)))
+	padLen += int(n.Int64())
+	padBytes := make([]byte, padLen)
+	rand.Read(padBytes)
+	req.Header.Set("X-Request-ID", base64.RawStdEncoding.EncodeToString(padBytes))
 }
 
 func (c *clientConn) Close() error {
