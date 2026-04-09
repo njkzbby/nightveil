@@ -13,9 +13,12 @@
 | Component | Required | Notes |
 |-----------|----------|-------|
 | VPS (Linux) | Yes | Any provider outside Russia (Hetzner, DigitalOcean, Oracle, Quins, etc.) |
-| Domain name | Recommended | For Cloudflare CDN. Without it — direct connection with self-signed cert. |
-| Cloudflare account | Recommended | Free plan is enough. Provides CDN stealth + collateral damage protection. |
+| Domain + Cloudflare | Optional | **Option 1: CDN mode** — domain behind Cloudflare, maximum stealth + collateral damage protection. **Option 2: REALITY mode** — no domain needed, server impersonates a real site (google.com). Both work. |
 | Windows/Mac/Linux PC | Yes | Client side |
+
+> **Which mode to choose?**
+> - **REALITY** (no domain) — quick setup, server pretends to be google.com. Good for personal use.
+> - **CDN** (Cloudflare) — harder to block (collateral damage), better for sharing with friends. Requires a $2-5 domain.
 
 ### Option A: Docker (recommended)
 
@@ -229,9 +232,12 @@ Windows:
 | Компонент | Обязательно | Примечание |
 |-----------|------------|------------|
 | VPS (Linux) | Да | Любой провайдер за пределами РФ (Hetzner, DigitalOcean, Oracle, Quins и т.д.) |
-| Доменное имя | Рекомендуется | Для Cloudflare CDN. Без него — прямое подключение с self-signed сертификатом. |
-| Аккаунт Cloudflare | Рекомендуется | Бесплатного плана достаточно. |
+| Домен + Cloudflare | Не обязательно | **Вариант 1: CDN** — домен за Cloudflare, максимальная скрытность + коллатеральный ущерб при блокировке. **Вариант 2: REALITY** — домен не нужен, сервер притворяется google.com. Оба варианта работают. |
 | ПК (Windows/Mac/Linux) | Да | Клиентская сторона |
+
+> **Какой режим выбрать?**
+> - **REALITY** (без домена) — быстрая настройка, сервер притворяется google.com. Подходит для личного использования.
+> - **CDN** (Cloudflare) — сложнее заблокировать (коллатеральный ущерб), лучше для шаринга с друзьями. Нужен домен за $2-5.
 
 ### Вариант А: Docker (рекомендуется)
 
