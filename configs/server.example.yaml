@@ -4,7 +4,9 @@ server:
   tls:
     cert_file: "/etc/nightveil/cert.pem"
     key_file: "/etc/nightveil/key.pem"
-    # REALITY mode (future):
+    # REALITY mode — forward probes to a real site.
+    # DPI sees real google.com certificate, not your server.
+    # You can use any popular site: google.com, microsoft.com, apple.com, etc.
     # dest: "google.com:443"
 
   auth:

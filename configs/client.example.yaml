@@ -22,8 +22,12 @@ client:
 
   tls:
     fingerprint: "chrome"
-    # sni: "custom-sni.com"    # for REALITY mode
-    # skip_verify: true        # for self-signed certs
+    # SNI — what domain name DPI sees in TLS handshake.
+    # Default: same as server address.
+    # REALITY mode: set to the site your server impersonates.
+    # Examples: "google.com", "microsoft.com", "apple.com"
+    # sni: "google.com"
+    # skip_verify: true        # for self-signed certs or REALITY
 
   middleware:
     - type: "padding"
