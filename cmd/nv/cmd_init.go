@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -146,7 +147,26 @@ func showImportLink(path string) {
 }
 
 func detectIP() string {
-	// Try to detect from network interfaces
+	// Method 1: HTTP-based external IP detection (works in Docker)
+	for _, url := range []string{
+		"https://api.ipify.org",
+		"https://ifconfig.me/ip",
+		"https://icanhazip.com",
+	} {
+		client := &http.Client{Timeout: 5 * time.Second}
+		resp, err := client.Get(url)
+		if err == nil {
+			defer resp.Body.Close()
+			body := make([]byte, 64)
+			n, _ := resp.Body.Read(body)
+			ip := strings.TrimSpace(string(body[:n]))
+			if net.ParseIP(ip) != nil {
+				return ip
+			}
+		}
+	}
+
+	// Method 2: Network interfaces (skip private/Docker IPs)
 	addrs, _ := net.InterfaceAddrs()
 	for _, a := range addrs {
 		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() && ipnet.IP.To4() != nil {
@@ -156,13 +176,8 @@ func detectIP() string {
 			}
 		}
 	}
-	// Fallback
-	conn, err := net.Dial("udp", "8.8.8.8:53")
-	if err == nil {
-		defer conn.Close()
-		return conn.LocalAddr().(*net.UDPAddr).IP.String()
-	}
-	return "0.0.0.0"
+
+	return "YOUR_SERVER_IP"
 }
 
 func generateCert(certPath, keyPath, ip string) {
