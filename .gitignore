@@ -23,3 +23,6 @@ deploy/v2rayn/
 
 # Test configs with real credentials
 configs/test-*.yaml
+build/release/
+build/nightveil-v2rayN-release/
+*.zip
