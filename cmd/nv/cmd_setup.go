@@ -154,6 +154,14 @@ func runSetup() {
 
 	os.WriteFile(linkPath, []byte(importLink+"\n"), 0644)
 
+	// Write .env for Docker compose port mapping
+	envPath := *configDir + "/.env"
+	os.WriteFile(envPath, []byte(fmt.Sprintf("NV_PORT=%d\n", port)), 0644)
+	// Also try to write .env in current directory (for docker compose)
+	if cwd, err := os.Getwd(); err == nil {
+		os.WriteFile(cwd+"/.env", []byte(fmt.Sprintf("NV_PORT=%d\n", port)), 0644)
+	}
+
 	// Save link per user
 	linksDir := *configDir + "/links"
 	os.MkdirAll(linksDir, 0700)

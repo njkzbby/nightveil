@@ -4,28 +4,19 @@ services:
     container_name: nightveil
     restart: unless-stopped
     ports:
-      - "443:443"
-      - "443:443/udp"
+      - "${NV_PORT:-443}:${NV_PORT:-443}"
+      - "${NV_PORT:-443}:${NV_PORT:-443}/udp"
     volumes:
       - nightveil-data:/etc/nightveil
 
 volumes:
   nightveil-data:
 
+# NV_PORT is auto-set by "nv setup" in .env file.
+#
 # Usage:
-#
-# First time setup (interactive):
-#   docker compose run --rm nightveil nv setup
-#   docker compose up -d
-#
-# Add user:
-#   docker compose exec nightveil nv adduser "Friend"
-#
-# Show import link:
-#   docker compose exec nightveil nv link
-#
-# List users:
-#   docker compose exec nightveil nv users
-#
-# Rebuild:
-#   docker compose build --no-cache && docker compose up -d
+#   docker compose run --rm nightveil nv setup    # first time
+#   docker compose up -d                          # start
+#   docker compose exec nightveil nv adduser "X"  # add user
+#   docker compose exec nightveil nv link         # show links
+#   docker compose exec nightveil nv users        # list users
