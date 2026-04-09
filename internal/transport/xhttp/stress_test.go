@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nightveil/nv/internal/crypto/auth"
-	"github.com/nightveil/nv/internal/protocol"
-	"github.com/nightveil/nv/internal/proxy"
-	"github.com/nightveil/nv/internal/transport"
+	"github.com/njkzbby/nightveil/internal/crypto/auth"
+	"github.com/njkzbby/nightveil/internal/protocol"
+	"github.com/njkzbby/nightveil/internal/proxy"
+	"github.com/njkzbby/nightveil/internal/transport"
 	"golang.org/x/crypto/curve25519"
 )
 

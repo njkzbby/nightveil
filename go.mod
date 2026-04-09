@@ -1,4 +1,4 @@
-module github.com/nightveil/nv
+module github.com/njkzbby/nightveil
 
 go 1.25.0
 

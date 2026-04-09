@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/nightveil/nv/internal/transport"
+	"github.com/njkzbby/nightveil/internal/transport"
 )
 
 // Command types for the proxy protocol.

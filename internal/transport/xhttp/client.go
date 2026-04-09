@@ -15,8 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/nightveil/nv/internal/crypto/auth"
-	"github.com/nightveil/nv/internal/transport"
+	"github.com/njkzbby/nightveil/internal/crypto/auth"
+	"github.com/njkzbby/nightveil/internal/transport"
 )
 
 // Client implements transport.ClientTransport over XHTTP.

@@ -14,14 +14,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nightveil/nv/internal/config"
-	"github.com/nightveil/nv/internal/crypto/auth"
-	"github.com/nightveil/nv/internal/fallback"
-	"github.com/nightveil/nv/internal/middleware"
-	"github.com/nightveil/nv/internal/protocol"
-	"github.com/nightveil/nv/internal/proxy"
-	"github.com/nightveil/nv/internal/security"
-	"github.com/nightveil/nv/internal/transport/xhttp"
+	"github.com/njkzbby/nightveil/internal/config"
+	"github.com/njkzbby/nightveil/internal/crypto/auth"
+	"github.com/njkzbby/nightveil/internal/fallback"
+	"github.com/njkzbby/nightveil/internal/middleware"
+	"github.com/njkzbby/nightveil/internal/protocol"
+	"github.com/njkzbby/nightveil/internal/proxy"
+	"github.com/njkzbby/nightveil/internal/security"
+	"github.com/njkzbby/nightveil/internal/transport/xhttp"
 )
 
 func runServer() {

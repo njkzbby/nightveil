@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/nightveil/nv/internal/transport"
+	"github.com/njkzbby/nightveil/internal/transport"
 )
 
 // Server implements ServerProtocol.

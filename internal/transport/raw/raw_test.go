@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nightveil/nv/internal/protocol"
-	"github.com/nightveil/nv/internal/proxy"
+	"github.com/njkzbby/nightveil/internal/protocol"
+	"github.com/njkzbby/nightveil/internal/proxy"
 )
 
 func TestRawTransportRoundTrip(t *testing.T) {

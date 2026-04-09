@@ -11,7 +11,7 @@ import (
 	"net"
 	"sync"
 
-	"github.com/nightveil/nv/internal/transport"
+	"github.com/njkzbby/nightveil/internal/transport"
 )
 
 const headerSize = 4 // 2B real_len + 2B pad_len

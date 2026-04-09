@@ -29,9 +29,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/nightveil/nv/internal/crypto/auth"
-	"github.com/nightveil/nv/internal/protocol"
-	"github.com/nightveil/nv/internal/transport/xhttp"
+	"github.com/njkzbby/nightveil/internal/crypto/auth"
+	"github.com/njkzbby/nightveil/internal/protocol"
+	"github.com/njkzbby/nightveil/internal/transport/xhttp"
 
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"

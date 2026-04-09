@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/nightveil/nv/internal/config"
+	"github.com/njkzbby/nightveil/internal/config"
 )
 
 func runUsers() {

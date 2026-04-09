@@ -10,8 +10,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/nightveil/nv/internal/config"
-	"github.com/nightveil/nv/internal/crypto/auth"
+	"github.com/njkzbby/nightveil/internal/config"
+	"github.com/njkzbby/nightveil/internal/crypto/auth"
 	"golang.org/x/crypto/curve25519"
 )
 

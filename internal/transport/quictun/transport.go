@@ -9,7 +9,7 @@ import (
 
 	"github.com/quic-go/quic-go"
 
-	"github.com/nightveil/nv/internal/transport"
+	"github.com/njkzbby/nightveil/internal/transport"
 )
 
 // Config for QUIC transport.

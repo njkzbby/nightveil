@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nightveil/nv/internal/crypto/auth"
-	"github.com/nightveil/nv/internal/transport"
+	"github.com/njkzbby/nightveil/internal/crypto/auth"
+	"github.com/njkzbby/nightveil/internal/transport"
 	"golang.org/x/crypto/curve25519"
 )
 

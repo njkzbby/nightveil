@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nightveil/nv/internal/crypto/auth"
+	"github.com/njkzbby/nightveil/internal/crypto/auth"
 	"golang.org/x/crypto/curve25519"
 )
 

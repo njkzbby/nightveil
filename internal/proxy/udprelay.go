@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nightveil/nv/internal/protocol"
+	"github.com/njkzbby/nightveil/internal/protocol"
 )
 
 const (

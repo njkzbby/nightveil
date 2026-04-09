@@ -3,7 +3,7 @@ package xhttp
 import (
 	"net"
 
-	"github.com/nightveil/nv/internal/session"
+	"github.com/njkzbby/nightveil/internal/session"
 )
 
 // splitConn combines a session's upload queue (read) and download pipe (write)

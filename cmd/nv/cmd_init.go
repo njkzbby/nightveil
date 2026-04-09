@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nightveil/nv/internal/config"
+	"github.com/njkzbby/nightveil/internal/config"
 	"golang.org/x/crypto/curve25519"
 )
 

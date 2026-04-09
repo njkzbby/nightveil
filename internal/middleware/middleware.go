@@ -3,7 +3,7 @@
 package middleware
 
 import (
-	"github.com/nightveil/nv/internal/transport"
+	"github.com/njkzbby/nightveil/internal/transport"
 )
 
 // Middleware wraps a transport.Conn, transforming data on Read/Write.

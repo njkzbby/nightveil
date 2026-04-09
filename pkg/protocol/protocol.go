@@ -1,7 +1,7 @@
 // Package protocol re-exports the proxy protocol for external consumers.
 package protocol
 
-import "github.com/nightveil/nv/internal/protocol"
+import "github.com/njkzbby/nightveil/internal/protocol"
 
 type Client = protocol.Client
 type Request = protocol.Request

@@ -1,7 +1,7 @@
 // Package xhttp re-exports XHTTP transport for external consumers.
 package xhttp
 
-import "github.com/nightveil/nv/internal/transport/xhttp"
+import "github.com/njkzbby/nightveil/internal/transport/xhttp"
 
 type Config = xhttp.Config
 type Client = xhttp.Client

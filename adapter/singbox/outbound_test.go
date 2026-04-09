@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nightveil/nv/internal/crypto/auth"
-	"github.com/nightveil/nv/internal/transport/xhttp"
+	"github.com/njkzbby/nightveil/internal/crypto/auth"
+	"github.com/njkzbby/nightveil/internal/transport/xhttp"
 	"golang.org/x/crypto/curve25519"
 
 	M "github.com/sagernet/sing/common/metadata"

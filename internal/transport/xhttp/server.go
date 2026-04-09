@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nightveil/nv/internal/crypto/auth"
-	"github.com/nightveil/nv/internal/session"
-	"github.com/nightveil/nv/internal/transport"
+	"github.com/njkzbby/nightveil/internal/crypto/auth"
+	"github.com/njkzbby/nightveil/internal/session"
+	"github.com/njkzbby/nightveil/internal/transport"
 )
 
 // Server implements transport.ServerTransport over XHTTP.

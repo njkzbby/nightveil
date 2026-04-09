@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nightveil/nv/internal/throttle"
+	"github.com/njkzbby/nightveil/internal/throttle"
 )
 
 // MultiplexedWriter wraps the client upload to support N parallel POST streams.
