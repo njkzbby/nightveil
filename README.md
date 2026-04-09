@@ -299,7 +299,8 @@ nv <command> [options]
 Commands:
   server    Start the Nightveil server
   connect   Connect to a server via URI or config file
-  keygen    Generate a new server or add a user
+  keygen    Generate keys and import links
+  users     List registered users
   init      Initialise a server directory (keys, certs, config)
   status    Show connection status
   version   Show version
@@ -310,6 +311,7 @@ Examples:
   nv connect -config client.yaml
   nv keygen  -server example.com:443 -remark "Alice"
   nv keygen  -server example.com:443 -pubkey SERVER_PUB -remark "Bob"
+  nv users   -config server.yaml
 ```
 
 ### `nv keygen` — first server setup
@@ -327,6 +329,43 @@ nv keygen -server example.com:443 -pubkey SERVER_PUB_KEY -remark "Bob"
 ```
 
 Generates a new user key pair only. Add the printed `short_id` + `public_key` to `server.yaml`, then restart the server.
+
+### `nv users` — list registered users
+
+```bash
+nv users -config server.yaml
+```
+
+Output:
+```
+  Users (2):
+
+  #     Short ID      Public Key                                    Name
+  ---   --------      ----------                                    ----
+  1     abcdef01      TI5Gzu8gqMK8eROMivx+/EVO0BXANGgjX4x3Mm...   Alice
+  2     12345678      Wl1RzgE1UajQ196aM7hf754Cwa8HQIdnW85reO...   Bob
+```
+
+In Docker:
+```bash
+docker compose exec nightveil nv users
+```
+
+### User management workflow
+
+```bash
+# 1. Add a new user (generates keypair + import link)
+nv keygen -server yourhost:443 -pubkey SERVER_PUB -remark "Charlie"
+
+# 2. Add the output (short_id + public_key) to server.yaml under auth.users:
+
+# 3. Restart
+systemctl restart nightveil   # or: docker compose restart
+
+# 4. Send the import link to the user
+
+# 5. To revoke: remove the user from server.yaml and restart
+```
 
 ---
 

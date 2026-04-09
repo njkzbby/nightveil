@@ -38,6 +38,8 @@ func main() {
 		runKeygen()
 	case "init":
 		runInit()
+	case "users":
+		runUsers()
 	case "status":
 		runStatus()
 	case "version", "-v", "--version":
@@ -67,6 +69,8 @@ Commands:
   server    Start the Nightveil server
   connect   Connect to a server (via URI or config file)
   keygen    Generate keys and import links
+  users     List registered users
+  init      Initialize a new server (keys, certs, config)
   status    Show connection status
   version   Show version
 
@@ -74,8 +78,9 @@ Examples:
   nv server -config server.yaml
   nv connect "nightveil://key@host:443?sid=...#Name"
   nv connect -config client.yaml
-  nv keygen -server example.com:443
-  nv keygen -server example.com:443 -pubkey KEY -remark "Friend"
+  nv keygen -server example.com:443 -remark "Alice"
+  nv keygen -server example.com:443 -pubkey KEY -remark "Bob"
+  nv users -config server.yaml
 
 `)
 }

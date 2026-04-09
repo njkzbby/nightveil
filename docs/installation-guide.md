@@ -366,20 +366,35 @@ cd nightveil
 .\deploy.ps1 root@IP_VPS
 ```
 
-### Добавление пользователей
+### Управление пользователями
 
+**Добавить пользователя:**
 ```bash
 nv keygen -server IP_VPS:443 -remark "Имя друга"
 ```
 
 Команда выведет:
-- Конфиг для добавления в `server.yaml`
-- Import link для отправки другу
+- `short_id` и `public_key` — добавить в `server.yaml` в секцию `auth.users`
+- Import link — отправить другу
 
-После добавления:
+После добавления в конфиг:
 ```bash
 systemctl restart nightveil   # или: docker compose restart
 ```
+
+**Посмотреть список пользователей:**
+```bash
+nv users -config server.yaml
+```
+
+В Docker:
+```bash
+docker compose exec nightveil nv users
+```
+
+**Отозвать пользователя:**
+
+Удалите запись пользователя из `server.yaml` → перезапустите сервер. Остальные пользователи не затронуты (у каждого свой ключ).
 
 ### Настройка Cloudflare CDN (опционально, рекомендуется)
 
