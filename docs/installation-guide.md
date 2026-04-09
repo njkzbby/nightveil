@@ -42,41 +42,24 @@ git clone https://github.com/njkzbby/nightveil
 cd nightveil
 ```
 
-**Step 4: Start the server**
+**Step 4: Run interactive setup**
 
-Replace `YOUR_IP` with your server's public IP address.
-
-REALITY mode (recommended):
 ```bash
-NV_IP=YOUR_IP NV_DEST=google.com:443 docker compose up -d
+docker compose run --rm nightveil nv setup
 ```
 
-Basic mode (self-signed TLS, no REALITY):
+The wizard auto-detects your IP and asks 4 questions. No manual parameters needed.
+
+**Step 5: Start server**
+
 ```bash
-NV_IP=YOUR_IP docker compose up -d
+docker compose up -d
 ```
 
-Custom port (if 443 is taken):
-```bash
-NV_IP=YOUR_IP NV_PORT=8443 docker compose up -d
-```
-
-All parameters:
-```bash
-NV_IP=203.0.113.1 NV_PORT=8443 NV_DEST=google.com:443 NV_NAME="My Server" docker compose up -d
-```
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `NV_IP` | **Yes (Docker)** | Your server's public IP. Used in the import link. |
-| `NV_PORT` | No (default: 443) | Listen port |
-| `NV_DEST` | No | REALITY target site (e.g. `google.com:443`) |
-| `NV_NAME` | No (default: Nightveil) | Display name |
-
-**Step 5: Get import link**
+**Step 6: Get import link**
 
 ```bash
-docker compose logs nightveil
+docker compose exec nightveil nv link
 ```
 
 Look for a line like:
@@ -275,38 +258,21 @@ git clone https://github.com/njkzbby/nightveil
 cd nightveil
 ```
 
-**Шаг 4: Запустите сервер**
+**Шаг 4: Интерактивная настройка**
 
-Замените `IP_ВАШЕГО_VPS` на публичный IP вашего сервера.
-
-REALITY режим (рекомендуется):
 ```bash
-NV_IP=IP_ВАШЕГО_VPS NV_DEST=google.com:443 docker compose up -d
+docker compose run --rm nightveil nv setup
 ```
 
-Базовый режим (без REALITY):
+Мастер определит IP автоматически и задаст 4 вопроса. Никаких ручных параметров.
+
+**Шаг 5: Запуск сервера**
+
 ```bash
-NV_IP=IP_ВАШЕГО_VPS docker compose up -d
+docker compose up -d
 ```
 
-Свой порт (если 443 занят):
-```bash
-NV_IP=IP_ВАШЕГО_VPS NV_PORT=8443 docker compose up -d
-```
-
-Все параметры сразу:
-```bash
-NV_IP=203.0.113.1 NV_PORT=8443 NV_DEST=google.com:443 NV_NAME="Мой сервер" docker compose up -d
-```
-
-| Переменная | Обязательно | Описание |
-|------------|-------------|----------|
-| `NV_IP` | **Да (Docker)** | Публичный IP вашего сервера. Используется в import link. |
-| `NV_PORT` | Нет (по умолчанию: 443) | Порт |
-| `NV_DEST` | Нет | REALITY target (например `google.com:443`) |
-| `NV_NAME` | Нет (по умолчанию: Nightveil) | Отображаемое имя |
-
-**Шаг 5: Получите ссылку для импорта**
+**Шаг 6: Получите ссылку для импорта**
 
 ```bash
 docker compose logs nightveil
@@ -398,27 +364,30 @@ cd nightveil
 
 **Добавить пользователя:**
 ```bash
-nv keygen -server IP_VPS:443 -remark "Имя друга"
+nv adduser "Имя друга"                           # bare metal
+docker compose exec nightveil nv adduser "Друг"  # Docker
 ```
 
-Команда выведет:
-- `short_id` и `public_key` — добавить в `server.yaml` в секцию `auth.users`
-- Import link — отправить другу
+Автоматически: генерирует ключи, добавляет в конфиг, сохраняет import link, выводит ссылку.
 
-После добавления в конфиг:
+После добавления:
 ```bash
 systemctl restart nightveil   # или: docker compose restart
 ```
 
 **Посмотреть список пользователей:**
 ```bash
-nv users -config server.yaml
+nv users                                         # bare metal
+docker compose exec nightveil nv users           # Docker
 ```
 
-В Docker:
+**Показать все import links (если кто-то потерял):**
 ```bash
-docker compose exec nightveil nv users
+nv link                                          # bare metal
+docker compose exec nightveil nv link            # Docker
 ```
+
+Все ссылки сохраняются в `/etc/nightveil/links/`. Каждый пользователь — отдельный файл.
 
 **Отозвать пользователя:**
 

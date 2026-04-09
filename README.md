@@ -78,61 +78,50 @@
 
 ## Quick Start — Docker
 
-### REALITY mode (recommended, no domain needed)
-
-REALITY mode makes your server indistinguishable from a real website. Censors and probes see a valid TLS certificate from the target site (e.g. google.com). **No domain name or CDN required.**
+### 1. Setup (interactive, one time)
 
 ```bash
 git clone https://github.com/njkzbby/nightveil
 cd nightveil
-
-# Start with REALITY — replace YOUR_IP with your server's public IP
-NV_IP=YOUR_IP NV_DEST=google.com:443 docker compose up -d
-
-# Get your import link
-docker compose logs nightveil
+docker compose run --rm nightveil nv setup
 ```
 
-You can use any popular site as REALITY target: `google.com`, `microsoft.com`, `apple.com`, `cloudflare.com`, etc.
+The setup wizard asks 4 questions and configures everything automatically:
+- **Server IP** — detected automatically, you confirm
+- **Port** — default 443
+- **REALITY target** — default google.com:443 (probes see real google.com)
+- **Server name** — display name in import links
 
-### Basic mode (self-signed TLS, no REALITY)
+At the end, it prints a ready-to-use **import link**.
+
+### 2. Start server
 
 ```bash
-NV_IP=YOUR_IP docker compose up -d
-docker compose logs nightveil
+docker compose up -d
 ```
 
-### Custom port
+### 3. Send import link to users
+
+Copy the import link from setup output. Or show it again:
 
 ```bash
-NV_IP=YOUR_IP NV_PORT=8443 docker compose up -d
+docker compose exec nightveil nv link
 ```
 
-### All parameters at once
+### 4. Add more users
 
 ```bash
-NV_IP=203.0.113.1 NV_PORT=8443 NV_DEST=google.com:443 NV_NAME="My Server" docker compose up -d
-```
-
-### Environment variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `NV_IP` | *(auto-detect)* | **Server public IP.** Required in Docker — used in the generated import link. On bare metal, detected automatically. |
-| `NV_PORT` | `443` | TCP/UDP port to listen on |
-| `NV_NAME` | `Nightveil` | Display name in the generated import link |
-| `NV_DEST` | *(empty)* | REALITY destination, e.g. `google.com:443`. Enables REALITY mode when set. |
-
-### Add a user to a running server
-
-```bash
-docker compose exec nightveil nv keygen -server YOUR_HOST:443 -remark "Alice"
-```
-
-The command prints the config snippet to add to `server.yaml` and a ready-to-import link. Restart the server after editing the config:
-
-```bash
+docker compose exec nightveil nv adduser "Alice"
 docker compose restart nightveil
+```
+
+This generates a new keypair, adds the user to config, and prints their import link. **No manual IP/port/key entry needed** — reads everything from the config.
+
+### 5. Manage users
+
+```bash
+docker compose exec nightveil nv users      # list users
+docker compose exec nightveil nv link       # show import link
 ```
 
 ### Rebuild after an update
@@ -662,54 +651,50 @@ This project is licensed under the GNU General Public License v3.0. See [LICENSE
 
 ## Быстрый старт — Docker
 
-### Базовый (self-signed TLS)
+### 1. Настройка (интерактивная, один раз)
 
 ```bash
 git clone https://github.com/njkzbby/nightveil
 cd nightveil
-# Замените YOUR_IP на публичный IP вашего сервера
-NV_IP=YOUR_IP NV_DEST=google.com:443 docker compose up -d
-docker compose logs nightveil   # ← здесь import link
+docker compose run --rm nightveil nv setup
 ```
 
-### Базовый режим (без REALITY)
+Мастер настройки задаёт 4 вопроса:
+- **IP сервера** — определяется автоматически, вы подтверждаете
+- **Порт** — по умолчанию 443
+- **REALITY target** — по умолчанию google.com:443 (зонды видят настоящий google.com)
+- **Имя сервера** — отображается в import link
+
+В конце выводит готовую **ссылку для импорта**.
+
+### 2. Запуск сервера
 
 ```bash
-NV_IP=YOUR_IP docker compose up -d
-docker compose logs nightveil
+docker compose up -d
 ```
 
-### Свой порт
+### 3. Отправьте import link пользователям
+
+Скопируйте ссылку из вывода setup. Или покажите снова:
 
 ```bash
-NV_IP=YOUR_IP NV_PORT=8443 docker compose up -d
+docker compose exec nightveil nv link
 ```
 
-### Все параметры сразу
+### 4. Добавление пользователей
 
 ```bash
-NV_IP=203.0.113.1 NV_PORT=8443 NV_DEST=google.com:443 NV_NAME="Мой сервер" docker compose up -d
-```
-
-### Переменные окружения
-
-| Переменная | По умолчанию | Описание |
-|------------|-------------|----------|
-| `NV_IP` | *(автоопределение)* | **Публичный IP сервера.** В Docker обязателен — используется в import link. На bare metal определяется автоматически. |
-| `NV_PORT` | `443` | TCP/UDP порт |
-| `NV_NAME` | `Nightveil` | Имя в import link |
-| `NV_DEST` | *(пусто)* | REALITY destination, например `google.com:443`. Включает REALITY когда задано. |
-
-### Добавить пользователя
-
-```bash
-docker compose exec nightveil nv keygen -server ХОСТ:443 -remark "Имя"
-```
-
-Команда выводит конфиг для `server.yaml` и готовую ссылку для импорта. После редактирования конфига:
-
-```bash
+docker compose exec nightveil nv adduser "Алиса"
 docker compose restart nightveil
+```
+
+Генерирует ключ, добавляет в конфиг, выводит import link. **Никаких ручных IP/портов/ключей** — всё берётся из конфига.
+
+### 5. Управление
+
+```bash
+docker compose exec nightveil nv users      # список пользователей
+docker compose exec nightveil nv link       # показать import link
 ```
 
 ---

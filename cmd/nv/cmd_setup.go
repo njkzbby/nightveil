@@ -154,6 +154,11 @@ func runSetup() {
 
 	os.WriteFile(linkPath, []byte(importLink+"\n"), 0644)
 
+	// Save link per user
+	linksDir := *configDir + "/links"
+	os.MkdirAll(linksDir, 0700)
+	os.WriteFile(linksDir+"/"+shortID+".txt", []byte(serverName+"\n"+importLink+"\n"), 0600)
+
 	fmt.Println("")
 	fmt.Println("  ✓ Server configured!")
 	fmt.Println("")

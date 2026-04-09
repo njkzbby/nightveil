@@ -118,13 +118,23 @@ func runAdduser() {
 		map[string]string{"upk": upkSafe, "skip": "1"},
 	)
 
+	// Save link to /etc/nightveil/links/<shortid>.txt
+	configDir := cfgPath
+	if idx := strings.LastIndex(cfgPath, "/"); idx >= 0 {
+		configDir = cfgPath[:idx]
+	}
+	linksDir := configDir + "/links"
+	os.MkdirAll(linksDir, 0700)
+	os.WriteFile(linksDir+"/"+shortID+".txt", []byte(name+"\n"+importLink+"\n"), 0600)
+
 	fmt.Println("")
 	fmt.Printf("  ✓ User \"%s\" added to %s\n", name, cfgPath)
 	fmt.Println("")
 	fmt.Println("  Import link (send to this user):")
 	fmt.Println(" ", importLink)
 	fmt.Println("")
-	fmt.Println("  Restart server to apply: systemctl restart nightveil")
-	fmt.Println("  Or: docker compose restart")
+	fmt.Println("  Restart server to apply:")
+	fmt.Println("    systemctl restart nightveil")
+	fmt.Println("    # or: docker compose restart")
 	fmt.Println("")
 }
