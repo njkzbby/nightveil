@@ -60,6 +60,13 @@ func runInit() {
 	rand.Read(sidBytes)
 	shortID := hex.EncodeToString(sidBytes)
 
+	// Generate per-user keypair
+	userPrivKey := make([]byte, 32)
+	rand.Read(userPrivKey)
+	userPubKey, _ := curve25519.X25519(userPrivKey, curve25519.Basepoint)
+	userPrivB64 := base64.RawStdEncoding.EncodeToString(userPrivKey)
+	userPubB64 := base64.RawStdEncoding.EncodeToString(userPubKey)
+
 	// Generate per-client params
 	pathPrefix := "/" + randAlpha(6)
 	uploadPath := "/u/" + randAlpha(3)
@@ -69,41 +76,46 @@ func runInit() {
 	// Generate self-signed TLS cert
 	generateCert(certPath, keyPath, serverIP)
 
-	// Write server config
+	// Write server config (with per-user key)
 	yaml := fmt.Sprintf(`server:
   listen: "0.0.0.0:%d"
   tls:
     cert_file: "%s"
     key_file: "%s"
+    # REALITY mode — uncomment to forward probes to a real site:
+    # dest: "google.com:443"
   auth:
     private_key: "%s"
-    short_ids:
-      - "%s"
     max_time_diff: 120
+    users:
+      - short_id: "%s"
+        public_key: "%s"
+        name: "%s"
   transport:
     type: "xhttp"
     max_chunk_size: 14336
     session_timeout: 30
-    max_parallel_uploads: 4
   middleware:
     - type: "padding"
       min_bytes: 64
       max_bytes: 256
   fallback:
     mode: "default"
-`, *port, certPath, keyPath, privB64, shortID)
+`, *port, certPath, keyPath, privB64, shortID, userPubB64, *name)
 
 	os.WriteFile(configPath, []byte(yaml), 0600)
 
-	// Generate import link
+	// Generate import link (with per-user private key)
 	importLink := config.GenerateURI(
 		pubB64, serverIP, *port, shortID,
 		pathPrefix, uploadPath, downloadPath,
 		sessionKey, 14336, "chrome", *name,
 	)
 
-	// Add skip=1 for self-signed cert
-	importLink += "&skip=1"
+	// Add user private key and skip=1 (self-signed cert)
+	upkSafe := strings.ReplaceAll(userPrivB64, "+", "-")
+	upkSafe = strings.ReplaceAll(upkSafe, "/", "_")
+	importLink += "&upk=" + upkSafe + "&skip=1"
 
 	// Save import link
 	os.WriteFile(linkPath, []byte(importLink+"\n"), 0644)
