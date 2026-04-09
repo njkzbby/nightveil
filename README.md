@@ -30,6 +30,7 @@
 - [Related Repositories](#related-repositories)
 - [Contributing](#contributing)
 - [License](#license)
+- [**Полное руководство по установке (RU/EN)**](docs/installation-guide.md)
 
 ---
 
