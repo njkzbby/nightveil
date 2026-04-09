@@ -12,24 +12,28 @@ services:
       - NV_PORT=${NV_PORT:-443}
       - NV_NAME=${NV_NAME:-Nightveil}
       - NV_DEST=${NV_DEST:-}
+      - NV_IP=${NV_IP:-}
 
 volumes:
   nightveil-data:
 
 # Usage:
 #
-# Basic (self-signed TLS):
-#   docker compose up -d
+# REALITY mode (recommended):
+#   NV_IP=YOUR_SERVER_IP NV_DEST=google.com:443 docker compose up -d
 #   docker compose logs  ← import link here
 #
-# Custom port:
-#   NV_PORT=8443 docker compose up -d
+# Basic (self-signed TLS):
+#   NV_IP=YOUR_SERVER_IP docker compose up -d
 #
-# REALITY mode (probes see real google.com):
-#   NV_DEST=google.com:443 docker compose up -d
+# Custom port:
+#   NV_IP=YOUR_SERVER_IP NV_PORT=8443 docker compose up -d
 #
 # Rebuild after updates:
 #   docker compose build --no-cache && docker compose up -d
 #
 # Add user:
 #   docker compose exec nightveil nv keygen -server HOST:PORT -remark "Friend"
+#
+# List users:
+#   docker compose exec nightveil nv users
