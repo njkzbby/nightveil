@@ -86,8 +86,8 @@ REALITY mode makes your server indistinguishable from a real website. Censors an
 git clone https://github.com/njkzbby/nightveil
 cd nightveil
 
-# Start with REALITY — probes see real google.com
-NV_DEST=google.com:443 docker compose up -d
+# Start with REALITY — replace YOUR_IP with your server's public IP
+NV_IP=YOUR_IP NV_DEST=google.com:443 docker compose up -d
 
 # Get your import link
 docker compose logs nightveil
@@ -98,20 +98,27 @@ You can use any popular site as REALITY target: `google.com`, `microsoft.com`, `
 ### Basic mode (self-signed TLS, no REALITY)
 
 ```bash
-docker compose up -d
+NV_IP=YOUR_IP docker compose up -d
 docker compose logs nightveil
 ```
 
 ### Custom port
 
 ```bash
-NV_PORT=8443 docker compose up -d
+NV_IP=YOUR_IP NV_PORT=8443 docker compose up -d
+```
+
+### All parameters at once
+
+```bash
+NV_IP=203.0.113.1 NV_PORT=8443 NV_DEST=google.com:443 NV_NAME="My Server" docker compose up -d
 ```
 
 ### Environment variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `NV_IP` | *(auto-detect)* | **Server public IP.** Required in Docker — used in the generated import link. On bare metal, detected automatically. |
 | `NV_PORT` | `443` | TCP/UDP port to listen on |
 | `NV_NAME` | `Nightveil` | Display name in the generated import link |
 | `NV_DEST` | *(empty)* | REALITY destination, e.g. `google.com:443`. Enables REALITY mode when set. |
@@ -660,29 +667,38 @@ This project is licensed under the GNU General Public License v3.0. See [LICENSE
 ```bash
 git clone https://github.com/njkzbby/nightveil
 cd nightveil
-docker compose up -d
+# Замените YOUR_IP на публичный IP вашего сервера
+NV_IP=YOUR_IP NV_DEST=google.com:443 docker compose up -d
 docker compose logs nightveil   # ← здесь import link
 ```
 
-### REALITY режим
+### Базовый режим (без REALITY)
 
 ```bash
-NV_DEST=google.com:443 docker compose up -d
+NV_IP=YOUR_IP docker compose up -d
+docker compose logs nightveil
 ```
 
 ### Свой порт
 
 ```bash
-NV_PORT=8443 docker compose up -d
+NV_IP=YOUR_IP NV_PORT=8443 docker compose up -d
+```
+
+### Все параметры сразу
+
+```bash
+NV_IP=203.0.113.1 NV_PORT=8443 NV_DEST=google.com:443 NV_NAME="Мой сервер" docker compose up -d
 ```
 
 ### Переменные окружения
 
 | Переменная | По умолчанию | Описание |
 |------------|-------------|----------|
+| `NV_IP` | *(автоопределение)* | **Публичный IP сервера.** В Docker обязателен — используется в import link. На bare metal определяется автоматически. |
 | `NV_PORT` | `443` | TCP/UDP порт |
 | `NV_NAME` | `Nightveil` | Имя в import link |
-| `NV_DEST` | *(пусто)* | REALITY destination. Включает REALITY когда задано. |
+| `NV_DEST` | *(пусто)* | REALITY destination, например `google.com:443`. Включает REALITY когда задано. |
 
 ### Добавить пользователя
 

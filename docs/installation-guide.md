@@ -44,20 +44,34 @@ cd nightveil
 
 **Step 4: Start the server**
 
-Basic mode (self-signed TLS):
+Replace `YOUR_IP` with your server's public IP address.
+
+REALITY mode (recommended):
 ```bash
-docker compose up -d
+NV_IP=YOUR_IP NV_DEST=google.com:443 docker compose up -d
 ```
 
-REALITY mode (probes see real google.com):
+Basic mode (self-signed TLS, no REALITY):
 ```bash
-NV_DEST=google.com:443 docker compose up -d
+NV_IP=YOUR_IP docker compose up -d
 ```
 
 Custom port (if 443 is taken):
 ```bash
-NV_PORT=8443 docker compose up -d
+NV_IP=YOUR_IP NV_PORT=8443 docker compose up -d
 ```
+
+All parameters:
+```bash
+NV_IP=203.0.113.1 NV_PORT=8443 NV_DEST=google.com:443 NV_NAME="My Server" docker compose up -d
+```
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `NV_IP` | **Yes (Docker)** | Your server's public IP. Used in the import link. |
+| `NV_PORT` | No (default: 443) | Listen port |
+| `NV_DEST` | No | REALITY target site (e.g. `google.com:443`) |
+| `NV_NAME` | No (default: Nightveil) | Display name |
 
 **Step 5: Get import link**
 
@@ -263,20 +277,34 @@ cd nightveil
 
 **Шаг 4: Запустите сервер**
 
-Базовый режим (self-signed TLS):
+Замените `IP_ВАШЕГО_VPS` на публичный IP вашего сервера.
+
+REALITY режим (рекомендуется):
 ```bash
-docker compose up -d
+NV_IP=IP_ВАШЕГО_VPS NV_DEST=google.com:443 docker compose up -d
 ```
 
-REALITY режим (зонды видят настоящий google.com):
+Базовый режим (без REALITY):
 ```bash
-NV_DEST=google.com:443 docker compose up -d
+NV_IP=IP_ВАШЕГО_VPS docker compose up -d
 ```
 
 Свой порт (если 443 занят):
 ```bash
-NV_PORT=8443 docker compose up -d
+NV_IP=IP_ВАШЕГО_VPS NV_PORT=8443 docker compose up -d
 ```
+
+Все параметры сразу:
+```bash
+NV_IP=203.0.113.1 NV_PORT=8443 NV_DEST=google.com:443 NV_NAME="Мой сервер" docker compose up -d
+```
+
+| Переменная | Обязательно | Описание |
+|------------|-------------|----------|
+| `NV_IP` | **Да (Docker)** | Публичный IP вашего сервера. Используется в import link. |
+| `NV_PORT` | Нет (по умолчанию: 443) | Порт |
+| `NV_DEST` | Нет | REALITY target (например `google.com:443`) |
+| `NV_NAME` | Нет (по умолчанию: Nightveil) | Отображаемое имя |
 
 **Шаг 5: Получите ссылку для импорта**
 
