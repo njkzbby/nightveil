@@ -558,3 +558,216 @@ This project is licensed under the GNU General Public License v3.0. See [LICENSE
 ---
 
 > Nightveil is a research and personal-use tool. Users are responsible for understanding and complying with applicable laws in their jurisdiction. The authors provide this software as-is, without warranty of any kind.
+
+---
+
+<details>
+<summary><h1>Документация на русском языке</h1></summary>
+
+# Nightveil
+
+**Nightveil** — антицензурный прокси-протокол, разработанный для обхода российской системы DPI (ТСПУ). Комбинирует XHTTP-транспорт (трафик выглядит как обычный веб-браузинг), REALITY-камуфляж TLS и многоуровневую систему anti-throttling.
+
+---
+
+## Возможности
+
+### Скрытный транспорт
+- **XHTTP packet-up** — разделяет upload и download на отдельные HTTP-транзакции. POST-запросы несут чанки до 14 КБ; GET-ответы стримят данные. Для ТСПУ это выглядит как обычный веб-сайт.
+- **uTLS** — TLS-хендшейк имитирует Chrome, Firefox или Safari. Go-шный TLS-стек никогда не виден.
+- **REALITY** — сервер показывает реальный сертификат целевого домена (например `google.com`). Active probing видит легитимный TLS.
+- **Fallback-сайт** — неавторизованные запросы получают реальный веб-сайт.
+
+### Anti-Throttling
+- Детекция throttling по RTT-спайкам и падению throughput
+- Адаптивное мультиплексирование — открывает дополнительные соединения при throttling
+- Ротация соединений с canary-проверкой
+- Per-client уникальные параметры (пути, padding, chunk sizes) ротируются каждые 5–30 минут
+
+### Криптография
+- **Double ECDH** — X25519 эфемерный ключ + per-user ключ × серверный ключ
+- **HKDF-SHA256 + ChaCha20-Poly1305 AEAD** — рандомный nonce для каждого сообщения
+- **Per-user ключи** — у каждого пользователя свой X25519 keypair, индивидуальный отзыв
+- Защита от replay-атак (временное окно 120 секунд)
+
+### Traffic Shaping
+- Composable middleware: padding, RTT jitter, traffic shaping (browsing/streaming/idle)
+- Cover traffic — генерация фонового трафика в периоды простоя
+- Рандомный padding на каждое сообщение
+
+### Протокол
+- Full-duplex прокси через XHTTP с фреймами (CONNECT / ACK / DATA / CLOSE / UDP)
+- UDP relay — Discord голос/видео работают
+- DownloadBuffer с offset tracking — нулевая потеря данных при reconnect
+- Transport Manager с автоматическим failover
+
+### Деплой
+- Один бинарник (`nv`) с подкомандами: `server`, `connect`, `keygen`, `init`
+- Docker с автоинициализацией — `nv init` при первом запуске, import link в логах
+- `deploy.ps1` — деплой на VPS одной командой из Windows
+- `install.sh` — интерактивный установщик для Linux с systemd
+- API для управления и мониторинга
+- Нативная поддержка в V2RayN через `nightveil://` URI
+- sing-box outbound адаптер
+
+---
+
+## Быстрый старт — Docker
+
+### Базовый (self-signed TLS)
+
+```bash
+git clone https://github.com/njkzbby/nightveil
+cd nightveil
+docker compose up -d
+docker compose logs nightveil   # ← здесь import link
+```
+
+### REALITY режим
+
+```bash
+NV_DEST=google.com:443 docker compose up -d
+```
+
+### Свой порт
+
+```bash
+NV_PORT=8443 docker compose up -d
+```
+
+### Переменные окружения
+
+| Переменная | По умолчанию | Описание |
+|------------|-------------|----------|
+| `NV_PORT` | `443` | TCP/UDP порт |
+| `NV_NAME` | `Nightveil` | Имя в import link |
+| `NV_DEST` | *(пусто)* | REALITY destination. Включает REALITY когда задано. |
+
+### Добавить пользователя
+
+```bash
+docker compose exec nightveil nv keygen -server ХОСТ:443 -remark "Имя"
+```
+
+Команда выводит конфиг для `server.yaml` и готовую ссылку для импорта. После редактирования конфига:
+
+```bash
+docker compose restart nightveil
+```
+
+---
+
+## Ручная установка
+
+### Деплой на VPS из Windows
+
+```powershell
+.\deploy.ps1 root@your-vps
+```
+
+### Интерактивный установщик Linux
+
+```bash
+bash deploy/install.sh
+```
+
+### Управление через systemd
+
+```bash
+systemctl status nightveil
+systemctl restart nightveil
+journalctl -u nightveil -f
+```
+
+---
+
+## Сборка из исходников
+
+```bash
+git clone https://github.com/njkzbby/nightveil
+cd nightveil
+go build -o nv ./cmd/nv/
+```
+
+Кросс-компиляция для Linux:
+
+```bash
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o nv-linux ./cmd/nv/
+```
+
+---
+
+## Формат import link
+
+```
+nightveil://СЕРВЕРНЫЙ_КЛЮЧ@ХОСТ:ПОРТ?sid=SHORT_ID&path=/префикс&up=/u/путь&down=/d/путь&skey=ключ&chunk=14336&fp=chrome&upk=ПРИВАТНЫЙ_КЛЮЧ_ЮЗЕРА#Название
+```
+
+| Параметр | Описание |
+|----------|----------|
+| `СЕРВЕРНЫЙ_КЛЮЧ` | Публичный X25519 ключ сервера (base64url) |
+| `ХОСТ:ПОРТ` | Адрес сервера |
+| `sid` | Short ID пользователя (8 hex символов) |
+| `path` | Префикс HTTP-пути |
+| `up` | Путь для upload (POST) |
+| `down` | Путь для download (GET streaming) |
+| `skey` | Имя HTTP-заголовка для session key |
+| `chunk` | Максимальный размер чанка в байтах |
+| `fp` | TLS fingerprint: `chrome`, `firefox`, `safari`, `randomized` |
+| `upk` | Приватный X25519 ключ пользователя (base64url) |
+| `#Название` | Отображаемое имя в клиенте |
+
+---
+
+## Покрытие угроз ТСПУ
+
+| Слой | Техника ТСПУ | Защита Nightveil |
+|------|-------------|------------------|
+| L1 — Сигнатуры | Сигнатуры IP-протоколов | Стандартный TCP/HTTPS; опционально через CDN |
+| L2 — TLS | JA3/JA4 TLS fingerprint | uTLS мимикрия Chrome/Firefox/Safari |
+| L2 — TLS | Блокировка по SNI | Настраиваемый SNI; CDN скрывает origin |
+| L3 — Active probing | Проверка TLS-сертификата | REALITY: зонды получают реальный сертификат |
+| L3 — Active probing | Проверка HTTP-контента | Fallback-сайт отдаёт реальный HTML |
+| L3 — Маршрутизация | ASN/IP несоответствие | CDN: IP принадлежит Cloudflare |
+| L4 — Поведение | Симметричный bidirectional трафик | XHTTP: upload и download — отдельные HTTP-транзакции |
+| L4 — Размеры | Порог 15-20 КБ | Чанки до 14 336 байт |
+| L4 — Размеры | Единообразный padding | Рандомный padding 64-256 байт |
+| L4 — Throttling | Замедление прокси | Адаптивный multiplexing + ротация соединений |
+| L4 — Фингерпринт | Стабильные параметры клиента | Пути, padding, chunk sizes ротируются каждые 5-30 мин |
+| L4 — Тайминг | Cross-layer RTT корреляция | RTT jitter + traffic shaping |
+| L4 — Idle | Детекция по тишине | Cover traffic в периоды простоя |
+| Go runtime | Fingerprint Go TLS стека | TLS терминируется на CDN; Go скрыт за CDN |
+
+---
+
+## Тестирование
+
+221 тест покрывает весь стек:
+
+```bash
+go test ./...           # все тесты
+go test -v ./...        # подробный вывод
+go test -race ./...     # race detector
+```
+
+---
+
+## Связанные репозитории
+
+| Репозиторий | Описание |
+|-------------|----------|
+| **nightveil** (этот) | Core протокол, сервер и CLI |
+| **nightveil-sing-box** | Форк sing-box с Nightveil outbound |
+| **nightveil-v2rayN** | Форк V2RayN с нативной поддержкой `nightveil://` |
+
+---
+
+## Лицензия
+
+Проект распространяется под лицензией GNU General Public License v3.0. См. [LICENSE](LICENSE).
+
+---
+
+> Nightveil — инструмент для исследований и личного использования. Пользователи несут ответственность за соблюдение законодательства своей юрисдикции. Авторы предоставляют ПО «как есть», без каких-либо гарантий.
+
+</details>
