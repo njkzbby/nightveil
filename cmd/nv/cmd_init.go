@@ -106,16 +106,15 @@ func runInit() {
 	os.WriteFile(configPath, []byte(yaml), 0600)
 
 	// Generate import link (with per-user private key)
+	upkSafe := strings.ReplaceAll(userPrivB64, "+", "-")
+	upkSafe = strings.ReplaceAll(upkSafe, "/", "_")
+
 	importLink := config.GenerateURI(
 		pubB64, serverIP, *port, shortID,
 		pathPrefix, uploadPath, downloadPath,
 		sessionKey, 14336, "chrome", *name,
+		map[string]string{"upk": upkSafe, "skip": "1"},
 	)
-
-	// Add user private key and skip=1 (self-signed cert)
-	upkSafe := strings.ReplaceAll(userPrivB64, "+", "-")
-	upkSafe = strings.ReplaceAll(upkSafe, "/", "_")
-	importLink += "&upk=" + upkSafe + "&skip=1"
 
 	// Save import link
 	os.WriteFile(linkPath, []byte(importLink+"\n"), 0644)

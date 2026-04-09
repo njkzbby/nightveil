@@ -7,6 +7,7 @@ type ServerConfig struct {
 
 type ServerSettings struct {
 	Listen     string             `yaml:"listen"`
+	ServerIP   string             `yaml:"server_ip,omitempty"` // saved by setup, used by adduser/link
 	TLS        TLSConfig          `yaml:"tls"`
 	Auth       AuthConfig         `yaml:"auth"`
 	Transport  TransportConfig    `yaml:"transport"`

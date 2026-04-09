@@ -34,6 +34,12 @@ func main() {
 		runServer()
 	case "connect":
 		runConnect()
+	case "setup":
+		runSetup()
+	case "adduser":
+		runAdduser()
+	case "link":
+		runLink()
 	case "keygen":
 		runKeygen()
 	case "init":
@@ -66,21 +72,23 @@ Usage:
   nv <command> [options]
 
 Commands:
+  setup     Interactive server setup (recommended first step)
+  adduser   Add a new user (reads config automatically)
+  link      Show import link
+  users     List registered users
   server    Start the Nightveil server
   connect   Connect to a server (via URI or config file)
-  keygen    Generate keys and import links
-  users     List registered users
-  init      Initialize a new server (keys, certs, config)
-  status    Show connection status
+  keygen    Generate keys and import links (advanced)
+  init      Non-interactive init (for scripting)
   version   Show version
 
 Examples:
-  nv server -config server.yaml
-  nv connect "nightveil://key@host:443?sid=...#Name"
-  nv connect -config client.yaml
-  nv keygen -server example.com:443 -remark "Alice"
-  nv keygen -server example.com:443 -pubkey KEY -remark "Bob"
-  nv users -config server.yaml
+  nv setup                                  # interactive setup
+  nv adduser "Alice"                        # add user, prints import link
+  nv link                                   # show import link
+  nv users                                  # list users
+  nv server -config server.yaml             # start server
+  nv connect "nightveil://...#Name"         # connect via link
 
 `)
 }

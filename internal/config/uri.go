@@ -27,6 +27,7 @@ func GenerateURI(
 	maxChunkSize int,
 	fingerprint string,
 	remark string,
+	extra map[string]string,
 ) string {
 	// Base64 URL-safe (no padding) for the key
 	pubKey := strings.ReplaceAll(serverPubKey, "+", "-")
@@ -45,8 +46,12 @@ func GenerateURI(
 	if fingerprint != "" {
 		params.Set("fp", fingerprint)
 	}
-	// SNI defaults to host — only include if different (reality mode)
-	// caller can add &sni=google.com manually
+	// Extra params (upk, skip, sni, etc.) — always before fragment
+	for k, v := range extra {
+		if v != "" {
+			params.Set(k, v)
+		}
+	}
 
 	fragment := ""
 	if remark != "" {

@@ -82,8 +82,8 @@ func runKeygen() {
 			serverPubB64, host, port, shortID,
 			pathPrefix, uploadPath, downloadPath,
 			sessionKeyName, 14336, "chrome", *remark,
+			map[string]string{"upk": base64UrlSafe(userPrivB64)},
 		)
-		uri += "&upk=" + base64UrlSafe(userPrivB64)
 
 		fmt.Println()
 		fmt.Println("Import link (send to this user):")

@@ -15,6 +15,7 @@ func TestGenerateURI(t *testing.T) {
 		14336,
 		"chrome",
 		"Test Server",
+		nil,
 	)
 
 	if !strings.HasPrefix(uri, "nightveil://") {
@@ -41,6 +42,7 @@ func TestParseURI(t *testing.T) {
 		12000,
 		"firefox",
 		"My Server",
+		nil,
 	)
 
 	cfg, remark, err := ParseURI(uri)
@@ -125,6 +127,7 @@ func TestRoundTripURI(t *testing.T) {
 		9000,
 		"safari",
 		"Test",
+		nil,
 	)
 
 	cfg, remark, err := ParseURI(uri)
@@ -143,5 +146,62 @@ func TestRoundTripURI(t *testing.T) {
 	}
 	if cfg.Client.Transport.MaxChunkSize != 9000 {
 		t.Errorf("chunk: %d", cfg.Client.Transport.MaxChunkSize)
+	}
+}
+
+func TestGenerateURIWithExtraParams(t *testing.T) {
+	uri := GenerateURI(
+		"dGVzdGtleQ",
+		"example.com", 443,
+		"aabb",
+		"/p", "/u/x", "/d/y",
+		"s",
+		14336,
+		"chrome",
+		"My Server",
+		map[string]string{"upk": "userkey123", "skip": "1"},
+	)
+
+	// Fragment (#Remark) must be LAST — not before upk/skip
+	if !strings.HasSuffix(uri, "#My%20Server") {
+		t.Fatalf("fragment not at end: %s", uri)
+	}
+	if !strings.Contains(uri, "upk=userkey123") {
+		t.Fatalf("missing upk: %s", uri)
+	}
+	if !strings.Contains(uri, "skip=1") {
+		t.Fatalf("missing skip: %s", uri)
+	}
+	// upk must be before # (in query, not fragment)
+	hashIdx := strings.Index(uri, "#")
+	upkIdx := strings.Index(uri, "upk=")
+	if upkIdx > hashIdx {
+		t.Fatalf("upk is after # (in fragment, should be in query): %s", uri)
+	}
+}
+
+func TestGenerateURIParsesWithUpk(t *testing.T) {
+	uri := GenerateURI(
+		"MJqcB1wHvED6O0q4mTYydwXVcUhmSuP5/hNBQVWMTCA",
+		"example.com", 443,
+		"abcd",
+		"/test", "/u/up", "/d/dn",
+		"key",
+		14336,
+		"chrome",
+		"Tolya",
+		map[string]string{"upk": "myprivatekey123", "skip": "1"},
+	)
+
+	cfg, remark, err := ParseURI(uri)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Remark must be clean — no &upk=... appended
+	if remark != "Tolya" {
+		t.Fatalf("remark should be 'Tolya', got '%s'", remark)
+	}
+	if cfg.Client.Auth.UserPrivateKey != "myprivatekey123" {
+		t.Fatalf("upk: got '%s'", cfg.Client.Auth.UserPrivateKey)
 	}
 }

@@ -4,36 +4,28 @@ services:
     container_name: nightveil
     restart: unless-stopped
     ports:
-      - "${NV_PORT:-443}:${NV_PORT:-443}"
-      - "${NV_PORT:-443}:${NV_PORT:-443}/udp"
+      - "443:443"
+      - "443:443/udp"
     volumes:
       - nightveil-data:/etc/nightveil
-    environment:
-      - NV_PORT=${NV_PORT:-443}
-      - NV_NAME=${NV_NAME:-Nightveil}
-      - NV_DEST=${NV_DEST:-}
-      - NV_IP=${NV_IP:-}
 
 volumes:
   nightveil-data:
 
 # Usage:
 #
-# REALITY mode (recommended):
-#   NV_IP=YOUR_SERVER_IP NV_DEST=google.com:443 docker compose up -d
-#   docker compose logs  ← import link here
-#
-# Basic (self-signed TLS):
-#   NV_IP=YOUR_SERVER_IP docker compose up -d
-#
-# Custom port:
-#   NV_IP=YOUR_SERVER_IP NV_PORT=8443 docker compose up -d
-#
-# Rebuild after updates:
-#   docker compose build --no-cache && docker compose up -d
+# First time setup (interactive):
+#   docker compose run --rm nightveil nv setup
+#   docker compose up -d
 #
 # Add user:
-#   docker compose exec nightveil nv keygen -server HOST:PORT -remark "Friend"
+#   docker compose exec nightveil nv adduser "Friend"
+#
+# Show import link:
+#   docker compose exec nightveil nv link
 #
 # List users:
 #   docker compose exec nightveil nv users
+#
+# Rebuild:
+#   docker compose build --no-cache && docker compose up -d
