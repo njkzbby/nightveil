@@ -51,9 +51,15 @@ func NewUTLSHTTPClient(cfg UTLSConfig) *http.Client {
 
 			return tlsConn, nil
 		},
-		// Keep HTTP/2 connection alive with pings instead of closing idle streams
-		ReadIdleTimeout: 30 * time.Second,  // send ping after 30s idle
-		PingTimeout:     15 * time.Second,  // wait 15s for ping response
+		// Aggressive ping schedule — the goal is to recover fast from brief
+		// network stalls (DPI shaping, router blips, ISP flaps) that manifest
+		// as the user-visible "messages hang, then all arrive at once" pattern.
+		// Previous 30s/15s meant up to 45 seconds of silent stall before the
+		// conn was killed and the client reconnected. 5s/5s caps that at 10s,
+		// which is still well above legitimate RTT jitter but way below what
+		// a human notices as "internet froze".
+		ReadIdleTimeout: 5 * time.Second, // send ping after 5s idle
+		PingTimeout:     5 * time.Second, // wait 5s for ping response
 		// Don't timeout streaming writes
 		WriteByteTimeout: 0,
 	}

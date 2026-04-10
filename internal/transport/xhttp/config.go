@@ -8,6 +8,20 @@ type Config struct {
 	SessionKeyName string // query param / cookie name for session ID, e.g. "cf_tok"
 	MaxChunkSize   int    // max bytes per POST upload chunk (default 14336)
 	SessionTimeout int    // seconds before orphaned session cleanup
+
+	// DownloadBufferBytes is the per-session sliding-window replay buffer
+	// for the download direction. Bytes already delivered to the active GET
+	// reader are dropped beyond this watermark. Default 4 MiB. Larger values
+	// allow longer reconnect windows at the cost of memory per session.
+	DownloadBufferBytes int
+
+	// UploadMode selects the upload transport submode:
+	//   "auto"   — stream-up if the HTTP client uses uTLS (direct/REALITY mode),
+	//              packet-up otherwise (CDN-friendly).
+	//   "stream" — single long-lived POST with chunked transfer encoding.
+	//              Lowest overhead, highest throughput. Required server v0.2+.
+	//   "packet" — POST per chunk, ordered via sequence numbers. CDN-compat.
+	UploadMode string
 }
 
 func (c *Config) defaults() {
@@ -28,6 +42,12 @@ func (c *Config) defaults() {
 	}
 	if c.SessionTimeout <= 0 {
 		c.SessionTimeout = 30
+	}
+	if c.DownloadBufferBytes <= 0 {
+		c.DownloadBufferBytes = 4 * 1024 * 1024 // 4 MiB replay window
+	}
+	if c.UploadMode == "" {
+		c.UploadMode = "auto"
 	}
 }
 

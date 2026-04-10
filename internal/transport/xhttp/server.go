@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/njkzbby/nightveil/internal/crypto/auth"
@@ -21,26 +20,19 @@ type Server struct {
 	sessions *session.Manager
 	fallback http.Handler
 	acceptCh chan transport.Conn
-
-	// Track which sessions have been sent to acceptCh
-	accepted   map[[16]byte]bool
-	hasUpload  map[[16]byte]bool
-	hasDownload map[[16]byte]bool
-	acceptedMu sync.Mutex
 }
 
 // NewServer creates an XHTTP server transport.
 func NewServer(cfg Config, authenticator auth.ServerAuth, fallback http.Handler) *Server {
 	cfg.defaults()
+	mgr := session.NewManager(time.Duration(cfg.SessionTimeout) * time.Second)
+	mgr.DownloadBufferBytes = cfg.DownloadBufferBytes
 	return &Server{
 		config:   cfg,
 		auth:     authenticator,
-		sessions: session.NewManager(time.Duration(cfg.SessionTimeout) * time.Second),
+		sessions: mgr,
 		fallback: fallback,
-		acceptCh:    make(chan transport.Conn, 64),
-		accepted:    make(map[[16]byte]bool),
-		hasUpload:   make(map[[16]byte]bool),
-		hasDownload: make(map[[16]byte]bool),
+		acceptCh: make(chan transport.Conn, 64),
 	}
 }
 
@@ -89,6 +81,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request, sessionID [16]byte) {
+	// Stream-up mode: a single long-lived POST whose body is the entire
+	// upload stream until the client closes. Routed by an explicit header
+	// so old packet-up clients keep working untouched.
+	if r.Header.Get("X-NV-Mode") == "stream" {
+		s.handleUploadStream(w, r, sessionID)
+		return
+	}
+
 	seqStr := r.URL.Query().Get("seq")
 	seq, err := strconv.ParseInt(seqStr, 10, 64)
 	if err != nil {
@@ -104,26 +104,51 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request, sessionID 
 
 	sess := s.sessions.GetOrCreate(sessionID)
 	sess.PushUpload(seq, body)
+	sess.HasUpload.Store(true)
 
-	s.acceptedMu.Lock()
-	s.hasUpload[sessionID] = true
-	s.acceptedMu.Unlock()
+	s.tryEmit(sess, r.RemoteAddr)
 
-	s.tryEmit(sess, sessionID, r.RemoteAddr)
+	w.WriteHeader(http.StatusOK)
+}
 
+// handleUploadStream serves a single long-lived POST whose body is the
+// session's entire upload stream. Bytes are pumped straight into the
+// session's stream pipe with io.Copy — no chunking, no sequence numbers,
+// no per-chunk ACKs. The TLS layer below already chunks the wire stream
+// into ≤16 KiB records, so TSPU thresholds are not violated.
+func (s *Server) handleUploadStream(w http.ResponseWriter, r *http.Request, sessionID [16]byte) {
+	sess := s.sessions.GetOrCreate(sessionID)
+	sess.HasUpload.Store(true)
+	// Stream mode allows the consumer (splitConn) to start reading even
+	// before the first byte arrives — emit immediately if a download GET
+	// has already arrived (or arrives later).
+	s.tryEmit(sess, r.RemoteAddr)
+
+	writer := sess.StreamUploadWriter()
+
+	// Copy until the client closes the request body. Buffer size is matched
+	// to the existing splitConn read path. io.Copy returns nil on clean EOF
+	// from r.Body — that's normal end-of-session.
+	buf := make([]byte, 32*1024)
+	if _, err := io.CopyBuffer(writer, r.Body, buf); err != nil {
+		// Surface the error to the consumer via pipe close.
+		log.Printf("[xhttp] stream upload copy: session=%x err=%v", sessionID[:4], err)
+	}
+	sess.CloseStreamUpload()
+
+	// Respond after the body is drained — many HTTP/2 clients don't read
+	// the response until they're done writing the request, so this is just
+	// best-effort acknowledgement.
 	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request, sessionID [16]byte) {
 	sess := s.sessions.GetOrCreate(sessionID)
-
-	s.acceptedMu.Lock()
-	s.hasDownload[sessionID] = true
-	s.acceptedMu.Unlock()
+	sess.HasDownload.Store(true)
 
 	// Mark connected and try to emit
 	sess.MarkConnected()
-	s.tryEmit(sess, sessionID, r.RemoteAddr)
+	s.tryEmit(sess, r.RemoteAddr)
 
 	// Stream — flush headers so client unblocks
 	w.Header().Set("Content-Type", "application/octet-stream")
@@ -158,10 +183,13 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request, sessionI
 				flusher.Flush()
 			}
 			offset = newOffset
+			// Tell the sliding buffer this offset has been delivered so it
+			// can compact older data within the replay window.
+			sess.DownloadBuf.Advance(offset)
 			continue // check for more data immediately
 		}
 		if err != nil {
-			return // session closed
+			return // session closed or offset too old
 		}
 
 		// No data yet — wait for notification or context cancel
@@ -175,22 +203,17 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request, sessionI
 }
 
 // tryEmit sends a new splitConn to acceptCh exactly once per session.
-func (s *Server) tryEmit(sess *session.Session, id [16]byte, remoteAddr string) {
-	s.acceptedMu.Lock()
-	if s.accepted[id] {
-		s.acceptedMu.Unlock()
-		return
-	}
-
+// State lives on the Session itself so cleanup happens automatically when
+// the session is GC'd — no per-server map to leak.
+func (s *Server) tryEmit(sess *session.Session, remoteAddr string) {
 	// Download GET is sufficient to emit — upload POST will feed data later.
 	// Previously required both, causing streaming (SSE) to stall until first POST.
-	if !s.hasDownload[id] {
-		s.acceptedMu.Unlock()
+	if !sess.HasDownload.Load() {
 		return
 	}
-
-	s.accepted[id] = true
-	s.acceptedMu.Unlock()
+	if !sess.Accepted.CompareAndSwap(false, true) {
+		return // already emitted
+	}
 
 	conn := newSplitConn(
 		sess,
