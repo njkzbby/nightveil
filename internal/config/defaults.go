@@ -14,5 +14,5 @@ const (
 	// Protocol identifiers
 	AuthInfoLabel = "nv-auth-v2"
 	ProtocolName  = "nightveil"
-	Version       = "0.1.0"
+	Version       = "0.2.0"
 )
